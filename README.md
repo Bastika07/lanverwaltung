@@ -1,13 +1,15 @@
 # 🎮 LAN-System
 
 Selbstgehostetes System für LAN-Partys mit Turnieren, Durchsagen, Programm, Infos, Teilnehmerliste und Sitzplan, dazu ein Beamer-Infoscreen und ein Discord-Bot.
-Es braucht keine externen Abhängigkeiten, nur Node.js (ab Version 22.16). Die Daten liegen in SQLite; bestehende JSON-Daten werden beim ersten Start automatisch übernommen.
+Es braucht keine npm-Installation, nur Node.js (ab Version 22.16). Der Markdown-Parser wird lokal mitgeliefert, ohne CDN-Zugriff. Die Daten liegen in SQLite; bestehende JSON-Daten werden beim ersten Start automatisch übernommen.
 
 **Catering:** Essensangebote pro Event, Gäste-Selbstanmeldung, Admin-Zuweisung und manuelle Bezahlmarkierung unter **Admin → Catering**. Zuerst unter **Einstellungen → Module** einschalten. Anleitung: [docs/catering.md](docs/catering.md).
 
 **Sicherheitsbetrieb:** Proxy-Zulisten, Firewall, Löschverhalten, Aufbewahrungsgrenzen und Image-Scans sind in [docs/security-operations.md](docs/security-operations.md) beschrieben. Neue Compose-Installationen sind standardmäßig nur über Host-Loopback erreichbar. Bei externem Proxy `BIND_ADDRESS`, `TRUSTED_PROXIES` und `PROXY_ONLY` ausdrücklich konfigurieren.
 
 **Website-Module:** Cookie-Hinweis, Impressum, Datenschutzerklärung, AGB, Verhaltenskodex und Sponsoren unter **Admin → Website & Rechtliches** websiteweit vorbereiten und einzeln veröffentlichen. Details und Grenzen: [docs/website-modules.md](docs/website-modules.md).
+
+**Markdown:** Infos, Eventdetails, Programmhinweise, Ticket-/Catering-/Gastserver-Beschreibungen und Website-Texte unterstützen Formatierungen mit Hilfe und Live-Vorschau. Beispiele: [docs/markdown.md](docs/markdown.md).
 
 ## Events
 

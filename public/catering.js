@@ -1,5 +1,5 @@
 'use strict';
-/* global api, esc, toast, views, adminViews, adminTabs, state, render, toLocalInput */
+/* global api, esc, toast, views, adminViews, adminTabs, state, render, toLocalInput, markdown, markdownHelp */
 const Catering = {
   money: (cents) => (cents / 100).toLocaleString('de-DE', { style: 'currency', currency: 'EUR' }),
   when: (iso) => iso ? new Date(iso).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' }) : '',
@@ -12,7 +12,7 @@ function cateringOffer(offer, data) {
   const guests = data.guests.filter((g) => !booked.has(g.key));
   return `<article class="card">
     <h2>${esc(offer.title)}</h2>
-    ${offer.description ? `<p class="website-text">${esc(offer.description)}</p>` : ''}
+    ${offer.description ? `<div class="website-text markdown">${markdown(offer.description)}</div>` : ''}
     <p><strong>${Catering.money(offer.price)}</strong> pro Person</p>
     ${offer.servingAt ? `<p class="meta">Ausgabe: ${esc(Catering.when(offer.servingAt))}</p>` : ''}
     ${offer.deadline ? `<p class="meta">Anmeldung bis: ${esc(Catering.when(offer.deadline))}</p>` : ''}
@@ -101,7 +101,7 @@ adminViews.catering = {
       <div class="two"><section class="card"><h2>${edit ? 'Angebot bearbeiten' : 'Neues Catering-Angebot'}</h2>
         <form id="cateringOfferForm">
           <div class="field"><label for="cTitle">Titel</label><input id="cTitle" name="title" maxlength="120" required value="${esc(offer.title)}" placeholder="z. B. Samstag: Grillbuffet"></div>
-          <div class="field"><label for="cDescription">Beschreibung</label><textarea id="cDescription" name="description" maxlength="1000">${esc(offer.description)}</textarea></div>
+          <div class="field"><label for="cDescription">Beschreibung (Markdown)</label><textarea id="cDescription" name="description" maxlength="1000">${esc(offer.description)}</textarea>${markdownHelp('cDescription')}</div>
           <div class="row two-inputs">
             <div class="field"><label for="cPrice">Preis pro Person (€)</label><input id="cPrice" name="price" type="number" min="0" max="10000" step="0.01" required value="${(offer.price / 100).toFixed(2)}"></div>
             <div class="field"><label for="cCapacity">Höchstzahl (0 = unbegrenzt)</label><input id="cCapacity" name="capacity" type="number" min="0" max="10000" step="1" required value="${offer.capacity}"></div>

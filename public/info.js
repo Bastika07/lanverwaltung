@@ -1,13 +1,13 @@
 'use strict';
-/* global api, esc, toast, views, adminViews, adminTabs, homeCards, beamerSlides, render */
+/* global api, esc, toast, views, adminViews, adminTabs, homeCards, beamerSlides, render, markdown, markdownHelp */
 // Info-Bereich: WLAN, Gameserver, Spieleliste, Hausregeln.
 
 // Nur http(s)-Links zulassen (kein javascript:, data: …)
 const safeUrl = (u) => (/^https?:\/\//i.test(String(u || '')) ? String(u) : null);
 
-// Text mit Zeilenumbrüchen und klickbaren Links
+// Gemeinsame Markdown-Darstellung für die Freitextfelder.
 function richText(s) {
-  return esc(s).replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>').replace(/\n/g, '<br>');
+  return markdown(s);
 }
 
 // Kopieren – auch ohne HTTPS (dort fehlt navigator.clipboard)
@@ -43,13 +43,13 @@ function wifiBlock(i) {
     <dl class="kv">
       <dt>Name</dt><dd><code>${esc(i.wifi.ssid)}</code> ${copyBtn(i.wifi.ssid)}</dd>
       ${i.wifi.password ? `<dt>Passwort</dt><dd><code>${esc(i.wifi.password)}</code> ${copyBtn(i.wifi.password)}</dd>` : ''}
-    </dl>${i.wifi.note ? `<p class="meta">${richText(i.wifi.note)}</p>` : ''}</div>`;
+    </dl>${i.wifi.note ? `<div class="meta markdown">${richText(i.wifi.note)}</div>` : ''}</div>`;
 }
 
 function serverTable(i) {
   if (!i.servers.length) return '';
   return `<div class="card"><h2>🖥️ Gameserver</h2><div style="overflow-x:auto"><table class="info-table"><thead><tr><th>Server</th><th>Adresse</th><th>Passwort</th></tr></thead><tbody>
-    ${i.servers.map((s) => `<tr><td><strong>${esc(s.name)}</strong>${s.game ? `<div class="meta">${esc(s.game)}</div>` : ''}${s.note ? `<div class="meta">${richText(s.note)}</div>` : ''}</td>
+    ${i.servers.map((s) => `<tr><td><strong>${esc(s.name)}</strong>${s.game ? `<div class="meta">${esc(s.game)}</div>` : ''}${s.note ? `<div class="meta markdown">${richText(s.note)}</div>` : ''}</td>
       <td class="nowrap"><code>${esc(s.address)}</code> ${copyBtn(s.address)}</td>
       <td class="nowrap">${s.password ? `<code>${esc(s.password)}</code> ${copyBtn(s.password)}` : '<span class="meta">–</span>'}</td></tr>`).join('')}
   </tbody></table></div></div>`;
@@ -63,12 +63,12 @@ views.infos = {
     document.getElementById('app').innerHTML = `<div class="page-head"><h1>Infos</h1></div>
       ${empty ? '<div class="empty">Noch keine Infos eingetragen.</div>' : `<div class="two">
         <div>${wifiBlock(i)}${serverTable(i)}
-          ${i.extra ? `<div class="card"><h2>ℹ️ Sonstiges</h2><p>${richText(i.extra)}</p></div>` : ''}</div>
+          ${i.extra ? `<div class="card"><h2>ℹ️ Sonstiges</h2><div class="markdown">${richText(i.extra)}</div></div>` : ''}</div>
         <div>
           ${i.games.length ? `<div class="card"><h2>🎮 Spiele</h2><p class="meta">Bitte vorher installieren und aktualisieren.</p><ul class="games">
-            ${i.games.map((g) => `<li><strong>${esc(g.name)}</strong>${safeUrl(g.link) ? ` <a href="${esc(safeUrl(g.link))}" target="_blank" rel="noopener noreferrer">↗</a>` : ''}${g.note ? `<div class="meta">${richText(g.note)}</div>` : ''}</li>`).join('')}
+            ${i.games.map((g) => `<li><strong>${esc(g.name)}</strong>${safeUrl(g.link) ? ` <a href="${esc(safeUrl(g.link))}" target="_blank" rel="noopener noreferrer">↗</a>` : ''}${g.note ? `<div class="meta markdown">${richText(g.note)}</div>` : ''}</li>`).join('')}
           </ul></div>` : ''}
-          ${i.rules ? `<div class="card"><h2>📜 Hausregeln</h2><p>${richText(i.rules)}</p></div>` : ''}
+          ${i.rules ? `<div class="card"><h2>📜 Hausregeln</h2><div class="markdown">${richText(i.rules)}</div></div>` : ''}
         </div></div>`}`;
   },
 };
@@ -105,10 +105,13 @@ beamerSlides.push({
 
 // ---------- Admin ----------
 // Editierbare Liste: Zeilen mit Feldern, + und ✕
+let listEditorId = 0;
 function listEditor(id, rows, fields) {
-  const row = (r = {}) => `<div class="le-row">${fields.map((f) => `<input data-f="${f.key}" placeholder="${esc(f.label)}" value="${esc(r[f.key] || '')}" style="flex:${f.flex || 1}">`).join('')}
+  const row = (r = {}, uid = 'LIST_ROW_ID') => `<div class="le-row">${fields.map((f) => f.key === 'note'
+    ? `<div class="le-note" style="flex:${f.flex || 1}"><textarea id="${uid}_note" class="short" data-f="note" aria-label="${esc(f.label)} (Markdown)" placeholder="${esc(f.label)} (Markdown)">${esc(r[f.key] || '')}</textarea>${markdownHelp(`${uid}_note`)}</div>`
+    : `<input data-f="${f.key}" placeholder="${esc(f.label)}" value="${esc(r[f.key] || '')}" style="flex:${f.flex || 1}">`).join('')}
     <button type="button" class="small danger le-del" title="Entfernen">✕</button></div>`;
-  return `<div class="list-editor" id="${id}" data-template="${esc(row())}">${rows.map(row).join('')}</div>
+  return `<div class="list-editor" id="${id}" data-template="${esc(row())}">${rows.map((r) => row(r, `${id}_${++listEditorId}`)).join('')}</div>
     <button type="button" class="small le-add" data-for="${id}">+ Hinzufügen</button>`;
 }
 
@@ -121,7 +124,7 @@ document.addEventListener('click', (e) => {
   if (e.target.classList.contains('le-del')) e.target.closest('.le-row').remove();
   if (e.target.classList.contains('le-add')) {
     const box = document.getElementById(e.target.dataset.for);
-    box.insertAdjacentHTML('beforeend', box.dataset.template);
+    box.insertAdjacentHTML('beforeend', box.dataset.template.replaceAll('LIST_ROW_ID', `${box.id}_${++listEditorId}`));
     box.lastElementChild.querySelector('input').focus();
   }
 });
@@ -140,18 +143,18 @@ adminViews.infos = {
                 <div class="field"><label for="wSsid">Name (SSID)</label><input id="wSsid" value="${esc(i.wifi.ssid)}"></div>
                 <div class="field"><label for="wPw">Passwort</label><input id="wPw" value="${esc(i.wifi.password)}"></div>
               </div>
-              <div class="field"><label for="wNote">Hinweis</label><input id="wNote" value="${esc(i.wifi.note)}" placeholder="z. B. Kabel bevorzugt, Switch unter dem Tisch"></div>
+              <div class="field"><label for="wNote">Hinweis (Markdown)</label><textarea id="wNote" class="short" placeholder="z. B. Kabel bevorzugt, Switch unter dem Tisch">${esc(i.wifi.note)}</textarea>${markdownHelp('wNote')}</div>
             </div>
             <div class="card"><h2>🖥️ Gameserver</h2>
               ${listEditor('servers', i.servers, [{ key: 'name', label: 'Name', flex: 1.2 }, { key: 'game', label: 'Spiel' }, { key: 'address', label: 'IP:Port', flex: 1.3 }, { key: 'password', label: 'Passwort' }, { key: 'note', label: 'Hinweis', flex: 1.4 }])}
             </div>
-            <div class="card"><h2>ℹ️ Sonstiges</h2><textarea id="iExtra" class="short">${esc(i.extra)}</textarea></div>
+            <div class="card"><h2>ℹ️ Sonstiges</h2><label for="iExtra">Inhalt (Markdown)</label><textarea id="iExtra" class="short">${esc(i.extra)}</textarea>${markdownHelp('iExtra')}</div>
           </div>
           <div>
             <div class="card"><h2>🎮 Spiele</h2>
               ${listEditor('games', i.games, [{ key: 'name', label: 'Spiel', flex: 1.2 }, { key: 'note', label: 'Hinweis (z. B. Version, Mods)', flex: 2 }, { key: 'link', label: 'Link', flex: 1.4 }])}
             </div>
-            <div class="card"><h2>📜 Hausregeln</h2><textarea id="iRules" class="short">${esc(i.rules)}</textarea></div>
+            <div class="card"><h2>📜 Hausregeln</h2><label for="iRules">Regeln (Markdown)</label><textarea id="iRules" class="short">${esc(i.rules)}</textarea>${markdownHelp('iRules')}</div>
           </div>
         </div>
         <p class="error" id="iError"></p>

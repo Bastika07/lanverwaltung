@@ -1,5 +1,5 @@
 'use strict';
-/* global api, esc, toast, state, views, adminViews, adminTabs, render, copyBtn */
+/* global api, esc, toast, state, views, adminViews, adminTabs, render, copyBtn, markdown, markdownHelp */
 // Gastserver: Teilnehmer melden eigene Server an und bekommen sofort IP und FQDN.
 // Die Orga sieht alle, sperrt oder löscht sie und exportiert die DNS-Einträge.
 
@@ -35,7 +35,7 @@ views.server = {
           <div class="row"><input id="gsName" required maxlength="63" pattern="[a-z0-9]([a-z0-9\\-]*[a-z0-9])?" placeholder="z. B. cs2-turnier" style="max-width:240px;text-transform:lowercase">
           <span class="meta">.${esc(d.domain)}</span></div>
           <p class="hint">Kleinbuchstaben, Ziffern und Bindestrich.</p></div>
-        <div class="field"><label for="gsDesc">Beschreibung</label><input id="gsDesc" required maxlength="300" placeholder="z. B. Counter-Strike 2 Dedicated, 5v5, Passwort im Discord"></div>
+        <div class="field"><label for="gsDesc">Beschreibung (Markdown)</label><textarea id="gsDesc" class="short" required maxlength="300" placeholder="z. B. Counter-Strike 2 Dedicated, 5v5, Passwort im Discord"></textarea>${markdownHelp('gsDesc')}</div>
         <label class="check field"><input type="checkbox" id="gsRev"> Reverse-Eintrag im DNS (PTR) gewünscht</label>
         <p class="error" id="gsError"></p>
         <button class="primary" type="submit" ${d.free ? '' : 'disabled'}>Anmelden und IP bekommen</button>
@@ -47,12 +47,12 @@ views.server = {
       ${GS.last ? serverResult(GS.last) : ''}
       <div class="two"><div>${form}
         ${mine.length ? `<div class="card"><h2>Deine Server</h2><table class="admin-list"><tbody>${mine.map((s) => `<tr>
-          <td><strong>${esc(s.fqdn)}</strong> ${copyBtn(s.fqdn)}<div class="meta">${esc(s.description)}${s.reverse ? ' · Reverse-DNS' : ''}${s.blocked ? ' · <strong>gesperrt</strong>' : ''}</div></td>
+          <td><strong>${esc(s.fqdn)}</strong> ${copyBtn(s.fqdn)}<div class="meta markdown">${markdown(s.description)}</div><div class="meta">${s.reverse ? 'Reverse-DNS' : ''}${s.blocked ? ' · <strong>gesperrt</strong>' : ''}</div></td>
           <td class="nowrap"><code>${esc(s.ip)}</code> ${copyBtn(s.ip)}</td>
           <td><button class="small danger" data-gsdel="${s.id}" title="Abmelden">🗑</button></td></tr>`).join('')}</tbody></table></div>` : ''}</div>
         <div class="card"><h2>Alle Gastserver (${d.servers.length})</h2>
           ${d.servers.length ? `<table class="admin-list"><tbody>${d.servers.map((s) => `<tr>
-            <td><strong>${esc(s.fqdn)}</strong><div class="meta">${esc(s.description)}${s.owner ? ` · ${esc(s.owner)}` : ''}</div></td>
+            <td><strong>${esc(s.fqdn)}</strong><div class="meta markdown">${markdown(s.description)}</div>${s.owner ? `<div class="meta">${esc(s.owner)}</div>` : ''}</td>
             <td class="nowrap"><code>${esc(s.ip)}</code> ${copyBtn(s.ip)}</td></tr>`).join('')}</tbody></table>` : '<p class="meta">Noch keine angemeldet.</p>'}
         </div></div>`;
 
@@ -105,7 +105,7 @@ adminViews.server = {
       </div>
       <div class="card"><h2>Gastserver (${d.servers.length})</h2>
         ${d.servers.length ? `<div style="overflow-x:auto"><table class="admin-list"><tbody>${d.servers.map((s) => `<tr class="${s.blocked ? 'past' : ''}">
-          <td><strong>${esc(s.fqdn)}</strong>${s.blocked ? ' <span class="badge">gesperrt</span>' : ''}<div class="meta">${esc(s.description)}</div></td>
+          <td><strong>${esc(s.fqdn)}</strong>${s.blocked ? ' <span class="badge">gesperrt</span>' : ''}<div class="meta markdown">${markdown(s.description)}</div></td>
           <td class="nowrap"><code>${esc(s.ip)}</code></td>
           <td class="nowrap">${s.reverse ? '↩ PTR' : '<span class="meta">kein PTR</span>'}</td>
           <td>${esc(s.owner)}<div class="meta">${new Date(s.createdAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}</div></td>

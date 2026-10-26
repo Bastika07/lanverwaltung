@@ -55,6 +55,25 @@ main.wide { max-width: none; }
 /* Websiteweite Rechtstexte, Sponsoren und nicht blockierender Cookie-Hinweis */
 .website-footer { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 24px; padding: 24px 20px; border-top: 1px solid var(--border); color: var(--muted); }
 .website-text { white-space: pre-wrap; overflow-wrap: anywhere; margin: 12px 0 20px; }
+.markdown { white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown p { margin: .6em 0; }
+.markdown h1, .markdown h2, .markdown h3, .markdown h4, .markdown h5, .markdown h6 { margin: 1em 0 .5em; line-height: 1.25; }
+.markdown ul, .markdown ol { padding-left: 1.6em; margin: .6em 0; }
+.markdown li + li { margin-top: .2em; }
+.markdown a { color: var(--accent); text-decoration: underline; }
+.markdown blockquote { margin: .8em 0; padding: .2em 1em; border-left: 3px solid var(--accent); color: var(--muted); }
+.markdown pre { white-space: pre; overflow-x: auto; padding: 12px; background: var(--bg); border-radius: 8px; }
+.markdown code { font-family: ui-monospace, monospace; background: var(--bg); padding: .1em .3em; border-radius: 4px; }
+.markdown pre code { padding: 0; }
+.markdown table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: .8em 0; }
+.markdown th, .markdown td { padding: 6px 10px; border: 1px solid var(--border); }
+.markdown hr { border: 0; border-top: 1px solid var(--border); margin: 1em 0; }
+.markdown input[type="checkbox"] { width: auto; }
+.markdown-help { margin: 6px 0 14px; font-size: .9rem; }
+.markdown-help summary { cursor: pointer; color: var(--muted); }
+.markdown-preview { border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-top: 10px; }
 .legal-document { max-width: 900px; }
 textarea.legal-editor { min-height: 260px; }
 .sponsor-editor { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin: 16px 0; min-width: 0; }
@@ -327,8 +346,10 @@ tr.now td { background: rgba(245, 179, 1, .08); }
 .info-strip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .games { list-style: none; padding: 0; margin: 0; }
 .games li { padding: 6px 0; border-bottom: 1px solid var(--border); }
-.list-editor .le-row { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
+.list-editor .le-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; align-items: center; }
 .list-editor .le-row input { min-width: 0; }
+.list-editor .le-note { min-width: 0; order: 1; flex: 1 1 100% !important; }
+.list-editor .le-note .markdown-help { margin-bottom: 0; }
 @media (max-width: 760px) { .list-editor .le-row { flex-wrap: wrap; } .list-editor .le-row input { flex: 1 1 45% !important; } }
 
 /* Teilnehmer & Sitzplan */
@@ -417,6 +438,7 @@ tr.now td { background: rgba(245, 179, 1, .08); }
 .account-head { align-items: center; }
 .avatar { width: 40px; height: 40px; border-radius: 50%; }
 .privacy { font-size: .85rem; color: var(--muted); background: var(--panel-2); border-radius: 8px; padding: 10px 12px; margin: 6px 0 10px; white-space: pre-line; }
+.privacy.markdown { white-space: normal; }
 .order-line { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
 .order-line select { width: auto; min-width: 70px; }
 .holder-line { margin: 8px 0 0; }

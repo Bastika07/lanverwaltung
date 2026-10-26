@@ -1,5 +1,5 @@
 'use strict';
-/* global api, esc, toast, state, views, adminViews, adminTabs, homeCards, render, richText */
+/* global api, esc, toast, state, views, adminViews, adminTabs, homeCards, render, richText, markdownHelp */
 // Eventdetails: allgemeine Infos zum Event (Beginn, Ende, Ort, Mindestalter, Tickets …) für
 // Interessierte und Käufer – auch für kommende Events. Die Infos vor Ort (WLAN, Server) stehen in info.js.
 
@@ -20,10 +20,10 @@ function detailsHtml(d) {
   ].filter(Boolean);
   return `<div class="card"><h2>📋 Details zur ${esc(d.event.name)}</h2>
       ${rows.length ? `<dl class="kv">${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>` : '<p class="meta">Noch keine Details eingetragen.</p>'}
-      ${x.text ? `<p>${richText(x.text)}</p>` : ''}
+      ${x.text ? `<div class="markdown">${richText(x.text)}</div>` : ''}
     </div>
     ${d.tickets.length ? `<div class="card"><h2>🎟️ Tickets und Eintrittspreise</h2>
-      <table class="admin-list"><tbody>${d.tickets.map((t) => `<tr><td><strong>${esc(t.name)}</strong>${t.description ? `<div class="meta">${esc(t.description)}</div>` : ''}</td>
+      <table class="admin-list"><tbody>${d.tickets.map((t) => `<tr><td><strong>${esc(t.name)}</strong>${t.description ? `<div class="meta markdown">${richText(t.description)}</div>` : ''}</td>
         <td class="nowrap" style="text-align:right"><strong>${t.price ? eur(t.price) : 'kostenlos'}</strong></td></tr>`).join('')}</tbody></table>
       ${state.settings.modules.tickets ? '<p><a class="btn primary" href="#/tickets">Zu den Tickets</a></p>' : ''}</div>` : ''}`;
 }
@@ -68,7 +68,7 @@ adminViews.details = {
           </div>
           <div class="field"><label for="dAddr">Adresse</label><input id="dAddr" maxlength="300" value="${esc(x.address)}" placeholder="Straße, PLZ Ort"></div>
           <div class="field"><label for="dFee">Zuschauer / Begleiter</label><input id="dFee" maxlength="120" value="${esc(x.spectatorFee)}" placeholder="z. B. 5 Euro Eintritt ohne PC"></div>
-          <div class="field"><label for="dText">Weitere Infos <span class="meta">(Links werden klickbar)</span></label><textarea id="dText">${esc(x.text)}</textarea></div>
+          <div class="field"><label for="dText">Weitere Infos (Markdown)</label><textarea id="dText">${esc(x.text)}</textarea>${markdownHelp('dText')}</div>
           <p class="error" id="dError"></p>
           <button class="primary" type="submit">Speichern</button>
         </form>

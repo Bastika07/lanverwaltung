@@ -13,7 +13,7 @@ test('assessment: actual frontend encoders and selected HTML builders escape hos
   const encoder = fs.readFileSync(path.join(publicDir, 'app.js'), 'utf8').split('\n').find((line) => line.startsWith('const esc ='));
   assert.ok(encoder);
   vm.runInContext(encoder, context);
-  for (const file of ['info.js', 'people.js', 'website.js']) vm.runInContext(fs.readFileSync(path.join(publicDir, file), 'utf8'), context, { filename: file });
+  for (const file of ['vendor/marked.umd.js', 'markdown.js', 'info.js', 'people.js', 'website.js']) vm.runInContext(fs.readFileSync(path.join(publicDir, file), 'utf8'), context, { filename: file });
   const helpers = vm.runInContext('({esc,richText,websiteText,sponsorCards,steamUrl,safeUrl,sponsorUrl,seatMap})', context);
   for (const value of ['<img src=x onerror=alert(1)>', '"><svg onload=alert(1)>', "'><script>alert(1)</script>", '&quot; onmouseover=alert(1)', 'https://example.invalid/" onclick="alert(1)']) {
     for (const html of [helpers.esc(value), helpers.richText(value), helpers.websiteText(value), helpers.sponsorCards([{ name: value, description: value, tier: value, url: 'javascript:alert(1)' }]),

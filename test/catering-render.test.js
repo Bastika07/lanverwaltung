@@ -7,9 +7,10 @@ const vm = require('node:vm');
 
 test('catering: real offer/entry builders escape guest/admin text and expose payment controls only for admin', () => {
   const root = path.resolve(__dirname, '../public');
-  const context = vm.createContext({ views: {}, adminViews: {} });
+  const context = vm.createContext({ views: {}, adminViews: {}, document: { addEventListener() {} } });
   const encoder = fs.readFileSync(path.join(root, 'app.js'), 'utf8').split('\n').find((line) => line.startsWith('const esc ='));
   vm.runInContext(encoder, context);
+  for (const file of ['vendor/marked.umd.js', 'markdown.js']) vm.runInContext(fs.readFileSync(path.join(root, file), 'utf8'), context);
   vm.runInContext(fs.readFileSync(path.join(root, 'catering.js'), 'utf8'), context);
   const { cateringOffer, cateringEntries } = vm.runInContext('({ cateringOffer, cateringEntries })', context);
   const hostile = '"><img src=x onerror=alert(1)><script>alert(1)</script>';

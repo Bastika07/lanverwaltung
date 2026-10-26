@@ -1,5 +1,5 @@
 'use strict';
-/* global api, esc, toast, state, on, views, adminViews, adminTabs, startHooks, liveHandlers, render, copyBtn, toLocalInput, QR, renderLogin, seatMap, seatLegend, loadMe, websiteLegalLinks */
+/* global api, esc, toast, state, on, views, adminViews, adminTabs, startHooks, liveHandlers, render, copyBtn, toLocalInput, QR, renderLogin, seatMap, seatLegend, loadMe, websiteLegalLinks, markdown, markdownHelp */
 // Tickets: Anmeldung mit Discord, eigene Daten, Bestellung mit Namen pro Ticket,
 // Überweisungsdaten, eigene Tickets – und die Verwaltung im Admin-Bereich.
 // Gibt es Tickets für mehrere Events (Vorverkauf fürs nächste), wählt der Besucher das Event (state.ticketEvent).
@@ -56,7 +56,7 @@ function profileForm(a, privacy) {
     ${f('street', 'Straße und Hausnummer', p.street, 'autocomplete="street-address"')}
     <div class="row two-inputs">${f('zip', 'PLZ', p.zip, 'autocomplete="postal-code" inputmode="numeric" maxlength="5" style="max-width:120px"')}${f('city', 'Ort', p.city, 'autocomplete="address-level2"')}</div>
     <div class="row two-inputs">${f('email', 'E-Mail', p.email, 'type="email" autocomplete="email"')}${f('birthdate', 'Geburtsdatum', p.birthdate, 'type="date" autocomplete="bday"')}</div>
-    <div class="privacy">${esc(privacy)}</div>
+    <div class="privacy markdown">${markdown(privacy)}</div>
     ${websiteLegalLinks(['datenschutz'])}
     <label class="check field"><input type="checkbox" id="pf_consent" ${a.consentAt ? 'checked' : ''}> Ich habe den Datenschutzhinweis gelesen und bin einverstanden.</label>
     <p class="error" id="pfError"></p>
@@ -170,7 +170,7 @@ views.tickets = {
 
     const typeList = types.length ? `<div class="grid tix-types">${types.map((t) => `<div class="card tix-type ${t.onSale ? '' : 'off'}">
         <div class="row" style="justify-content:space-between"><h3>${esc(t.name)}</h3><span class="price">${t.price ? euro(t.price) : 'kostenlos'}</span></div>
-        ${t.description ? `<p class="meta">${esc(t.description)}</p>` : ''}
+        ${t.description ? `<div class="meta markdown">${markdown(t.description)}</div>` : ''}
         <p class="meta">${[t.available != null && t.onSale ? `noch ${t.available} verfügbar` : '', saleInfo(t)].filter(Boolean).join(' · ')}</p></div>`).join('')}</div>`
       : '<div class="empty">Der Ticketverkauf hat noch nicht begonnen.</div>';
 
@@ -379,7 +379,7 @@ adminViews.tickets = {
               <div class="field"><label for="tName">Name</label><input id="tName" required maxlength="80" value="${esc(et ? et.name : '')}" placeholder="z. B. Teilnehmer mit Platz"></div>
               <div class="field"><label for="tPrice">Preis (€)</label><input id="tPrice" required inputmode="decimal" value="${et ? (et.price / 100).toFixed(2).replace('.', ',') : ''}" style="max-width:110px"></div>
             </div>
-            <div class="field"><label for="tDesc">Beschreibung</label><input id="tDesc" maxlength="300" value="${esc(et ? et.description : '')}" placeholder="z. B. inkl. Frühstück, Sitzplatz mit Strom und LAN"></div>
+            <div class="field"><label for="tDesc">Beschreibung (Markdown)</label><textarea id="tDesc" class="short" maxlength="300" placeholder="z. B. inkl. Frühstück, Sitzplatz mit Strom und LAN">${esc(et ? et.description : '')}</textarea>${markdownHelp('tDesc')}</div>
             <div class="row two-inputs">
               <div class="field"><label for="tQuota">Kontingent <span class="meta">(leer = unbegrenzt)</span></label><input id="tQuota" type="number" min="0" value="${et && et.quota != null ? et.quota : ''}"></div>
               <div class="field"><label for="tMax">Max. pro Bestellung</label><input id="tMax" type="number" min="1" max="50" value="${et ? et.maxPerOrder : 10}"></div>
@@ -423,7 +423,7 @@ adminViews.tickets = {
                 <div class="field"><label for="bBic">BIC</label><input id="bBic" value="${esc(s.bank.bic)}"></div>
                 <div class="field"><label for="bBank">Bank</label><input id="bBank" value="${esc(s.bank.bank)}"></div>
               </div>
-              <div class="field"><label for="sPrivacy">Datenschutzhinweis (wird bei der Registrierung angezeigt)</label><textarea id="sPrivacy" class="short">${esc(s.privacy)}</textarea></div>
+              <div class="field"><label for="sPrivacy">Datenschutzhinweis (Markdown, wird bei der Registrierung angezeigt)</label><textarea id="sPrivacy" class="short">${esc(s.privacy)}</textarea>${markdownHelp('sPrivacy')}</div>
               <p class="error" id="sError"></p>
               <button class="primary" type="submit">Speichern</button>
             </form>

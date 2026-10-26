@@ -23,7 +23,7 @@ Gäste sehen nur ihre eigenen bzw. die zu ihren bezahlten Tickets gehörenden An
 - Angebote mit Anmeldungen können nicht gelöscht werden; stattdessen die Selbstanmeldung schließen. Events mit Catering-Anmeldungen bleiben als Archiv erhalten.
 - Beim Kopieren eines Events werden Angebote ohne Zeiten, zunächst geschlossen und mit neuen IDs übernommen, niemals Anmeldungen oder Zahlungen.
 
-Es gibt keine Online-Zahlungsabwicklung, Rechnungserstellung, automatische Mahnung oder Discord-Catering-Befehle. Freitexte sind einfache, HTML-kodierte Texte, kein HTML-Editor.
+Es gibt keine Online-Zahlungsabwicklung, Rechnungserstellung, automatische Mahnung oder Discord-Catering-Befehle. Angebotsbeschreibungen unterstützen [Markdown](markdown.md) mit Hilfe und Live-Vorschau, aber kein aktives HTML oder eingebettete Bilder.
 
 ## Speicherung und Schutz
 

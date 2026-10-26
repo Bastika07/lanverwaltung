@@ -1,5 +1,5 @@
 'use strict';
-/* global api, esc, toast, on, views, adminViews, adminTabs, homeCards, beamerSlides, countdownText, render */
+/* global api, esc, toast, on, views, adminViews, adminTabs, homeCards, beamerSlides, countdownText, render, markdown, markdownHelp */
 // Programm: Zeitplan mit Countdown (Seite, Startseite, Beamer) und Admin-Pflege.
 
 const Sched = {
@@ -24,7 +24,7 @@ function schedItem(e) {
     <div class="sched-time">${Sched.time(e.start)}${e.end ? `<span>– ${Sched.time(e.end)}</span>` : ''}</div>
     <div class="sched-body">
       <div class="sched-title">${esc(e.title)}${e.announce ? ' <span title="Mit Durchsage">📢</span>' : ''}</div>
-      ${e.note ? `<div class="meta">${esc(e.note)}</div>` : ''}
+      ${e.note ? `<div class="meta markdown">${markdown(e.note)}</div>` : ''}
     </div>
     <div class="sched-state">${st === 'now' ? '<span class="badge running">läuft</span>'
       : st === 'next' ? `<span class="countdown" data-countdown="${e.start}">${countdownText(e.start)}</span>` : ''}</div>
@@ -101,7 +101,7 @@ adminViews.programm = {
               <div class="field"><label for="sStart">Beginn</label><input id="sStart" type="datetime-local" required value="${toLocalInput(e.start)}"></div>
               <div class="field"><label for="sEnd">Ende <span class="meta">(optional)</span></label><input id="sEnd" type="datetime-local" value="${toLocalInput(e.end)}"></div>
             </div>
-            <div class="field"><label for="sNote">Hinweis <span class="meta">(optional)</span></label><input id="sNote" maxlength="500" value="${esc(e.note)}" placeholder="z. B. Pizza wird im Flur verteilt"></div>
+            <div class="field"><label for="sNote">Hinweis <span class="meta">(optional, Markdown)</span></label><textarea id="sNote" class="short" maxlength="500" placeholder="z. B. Pizza wird im Flur verteilt">${esc(e.note)}</textarea>${markdownHelp('sNote')}</div>
             <div class="field"><label for="sRemind">Erinnerung in Discord vorher (Minuten, 0 = keine)</label><input id="sRemind" type="number" min="0" max="1440" value="${e.remind}" style="max-width:140px"></div>
             <label class="check field"><input type="checkbox" id="sAnnounce" ${e.announce ? 'checked' : ''} ${on('announcements') ? '' : 'disabled'}> 📢 Zum Beginn als Durchsage (Lampe, Gong, Einblendung)</label>
             <p class="error" id="sError"></p>
@@ -115,7 +115,7 @@ adminViews.programm = {
           <h2>Programm (${list.length})</h2>
           ${list.length ? `<table class="admin-list"><tbody>${list.map((x) => `<tr class="${Sched.status(x)}">
             <td class="nowrap">${Sched.day(x.start).split(',')[0]}<br><strong>${Sched.time(x.start)}</strong></td>
-            <td><strong>${esc(x.title)}</strong>${x.announce ? ' 📢' : ''}<div class="meta">${esc(x.note || '')}${x.remind ? ` · ⏰ ${x.remind} Min vorher` : ''}</div></td>
+            <td><strong>${esc(x.title)}</strong>${x.announce ? ' 📢' : ''}<div class="meta markdown">${markdown(x.note || '')}</div>${x.remind ? `<div class="meta">⏰ ${x.remind} Min vorher</div>` : ''}</td>
             <td><div class="row"><a class="btn" href="#/admin/programm/${x.id}">Bearbeiten</a><button class="danger" data-del="${x.id}">Löschen</button></div></td>
           </tr>`).join('')}</tbody></table>` : '<p class="meta">Noch leer.</p>'}
         </div>

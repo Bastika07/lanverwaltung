@@ -1,9 +1,9 @@
 'use strict';
-/* global api, esc, toast, views, adminViews, adminTabs, homeCards, startHooks, liveHandlers, buildNav, render */
+/* global api, esc, toast, views, adminViews, adminTabs, homeCards, startHooks, liveHandlers, buildNav, render, markdown, markdownHelp */
 // Kein HTML-Editor und keine externen Bilder/Embeds: Inhalte können keine Skripte oder Tracker laden.
 const Website = { pages: {}, cookies: null, sponsors: null, dismissed: null };
 const WEBSITE_TITLES = { impressum: 'Impressum', datenschutz: 'Datenschutzerklärung', agb: 'AGB', verhaltenskodex: 'Verhaltenskodex' };
-const websiteText = (text) => `<div class="website-text">${esc(text)}</div>`;
+const websiteText = (text) => `<div class="website-text markdown">${markdown(text)}</div>`;
 function websiteLegalLinks(keys) {
   const links = keys.filter((key) => Website.pages[key]).map((key) => `<a href="#/${key}" target="_blank" rel="noopener">${esc(Website.pages[key].title)} ↗</a>`);
   return links.length ? `<p class="hint">${links.join(' · ')}</p>` : '';
@@ -92,28 +92,23 @@ adminViews.website = { label: 'Website & Rechtliches', order: 85, events: ['webs
   app.innerHTML = `${adminTabs('website')}<form id="websiteForm" class="editor">
     <div class="card"><h1>Website-Module</h1><p>Diese Einstellungen gelten für <strong>alle Events</strong>. Veröffentlichung ist unabhängig von Event-Modulen und Ticketzugang.</p>
       <p class="hint">Keine Rechtsberatung und keine fertigen Rechtstexte: Inhalte durch die verantwortliche Orga erstellen und prüfen lassen.
-      Unveröffentlichte Entwürfe sehen nur Admins. HTML wird als Text angezeigt; externe Bilder und Skripte sind nicht erlaubt.</p></div>
+      Unveröffentlichte Entwürfe sehen nur Admins. Markdown ermöglicht Formatierung; HTML wird als Text angezeigt, externe Bilder und Skripte sind nicht erlaubt.</p></div>
     ${Object.entries(WEBSITE_TITLES).map(([key, title]) => `<section class="card"><h2>${title}</h2>
       <label class="check"><input id="web_${key}_on" type="checkbox" ${s.pages[key].enabled ? 'checked' : ''}> Modul veröffentlichen (öffentlich im Footer)</label>
-      <div class="field"><label for="web_${key}_text">Inhalt</label><textarea id="web_${key}_text" class="legal-editor" maxlength="60000">${esc(s.pages[key].text)}</textarea></div>
-      <details><summary>Lokale Vorschau</summary><div id="web_${key}_preview" class="website-text"></div></details></section>`).join('')}
+      <div class="field"><label for="web_${key}_text">Inhalt (Markdown)</label><textarea id="web_${key}_text" class="legal-editor" maxlength="60000">${esc(s.pages[key].text)}</textarea>${markdownHelp(`web_${key}_text`)}</div></section>`).join('')}
     <section class="card"><h2>Cookie-Banner</h2>
       <label class="check"><input id="web_cookies_on" type="checkbox" ${s.cookies.enabled ? 'checked' : ''}> Cookie-Hinweis und Detailseite aktivieren</label>
       <p class="hint">Nur notwendige Cookies/Browserspeicher, keine optionalen Tracker: schließbarer Hinweis statt „Alle akzeptieren“.
         Das Schließen wird nur für die Tab-Sitzung gespeichert; Änderungen am Hinweis oder veröffentlichten Datenschutztext zeigen ihn erneut.
         Bei künftigen optionalen Diensten ist vor deren Laden eine echte Einwilligungssteuerung erforderlich.</p>
-      <div class="field"><label for="web_cookie_text">Hinweistext</label><textarea id="web_cookie_text" maxlength="3000">${esc(s.cookies.text)}</textarea></div></section>
+      <div class="field"><label for="web_cookie_text">Hinweistext (Markdown)</label><textarea id="web_cookie_text" maxlength="3000">${esc(s.cookies.text)}</textarea>${markdownHelp('web_cookie_text')}</div></section>
     <section class="card"><h2>Sponsoren</h2>
       <label class="check"><input id="web_sponsors_on" type="checkbox" ${s.sponsors.enabled ? 'checked' : ''}> Sponsoren auf Startseite und eigener Seite veröffentlichen</label>
-      <div class="field"><label for="web_sponsor_text">Einleitung</label><textarea id="web_sponsor_text" maxlength="5000">${esc(s.sponsors.text)}</textarea></div>
+      <div class="field"><label for="web_sponsor_text">Einleitung (Markdown)</label><textarea id="web_sponsor_text" maxlength="5000">${esc(s.sponsors.text)}</textarea>${markdownHelp('web_sponsor_text')}</div>
       <p class="hint">Name, Kategorie, Beschreibung und optionaler HTTPS-Link. Keine extern geladenen Logos oder Tracker. Reihenfolge per Pfeil ändern.</p>
       <div id="sponsorEditors"></div><button type="button" id="sponsorAdd">Sponsor hinzufügen</button></section>
     <div class="card"><p class="hint">AGB und Verhaltenskodex werden als Informationsseiten veröffentlicht. Dieses Modul erfasst keine vertragliche Zustimmung beim Ticketkauf.</p>
       <p class="error" id="websiteError" role="alert"></p><button type="submit" class="primary big">Website-Module speichern</button></div></form>`;
-  for (const key of Object.keys(WEBSITE_TITLES)) {
-    const input = document.getElementById(`web_${key}_text`), preview = document.getElementById(`web_${key}_preview`);
-    input.oninput = () => { preview.textContent = input.value; }; input.oninput();
-  }
   let entries = structuredClone(s.sponsors.entries);
   const editors = document.getElementById('sponsorEditors');
   function readEntries() {
@@ -128,7 +123,7 @@ adminViews.website = { label: 'Website & Rechtliches', order: 85, events: ['webs
       <div class="row two-inputs"><div class="field"><label for="sponsor_${i}_name">Name</label><input id="sponsor_${i}_name" data-field="name" maxlength="120" required value="${esc(entry.name)}"></div>
       <div class="field"><label for="sponsor_${i}_tier">Kategorie (z. B. Gold)</label><input id="sponsor_${i}_tier" data-field="tier" maxlength="80" value="${esc(entry.tier)}"></div></div>
       <div class="field"><label for="sponsor_${i}_url">HTTPS-Link (optional)</label><input id="sponsor_${i}_url" data-field="url" type="url" maxlength="1000" value="${esc(entry.url)}" placeholder="https://..."></div>
-      <div class="field"><label for="sponsor_${i}_description">Beschreibung</label><textarea id="sponsor_${i}_description" data-field="description" maxlength="2000">${esc(entry.description)}</textarea></div>
+      <div class="field"><label for="sponsor_${i}_description">Beschreibung (Markdown)</label><textarea id="sponsor_${i}_description" data-field="description" maxlength="2000">${esc(entry.description)}</textarea>${markdownHelp(`sponsor_${i}_description`)}</div>
       <div class="row"><button type="button" data-move="up" aria-label="Sponsor ${i + 1} nach oben" ${i === 0 ? 'disabled' : ''}>↑</button>
       <button type="button" data-move="down" aria-label="Sponsor ${i + 1} nach unten" ${i === entries.length - 1 ? 'disabled' : ''}>↓</button>
       <button type="button" data-remove class="danger">Entfernen</button></div></fieldset>`).join('');

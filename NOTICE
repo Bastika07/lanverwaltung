@@ -9,3 +9,8 @@ implementation by Project Nayuki, licensed under the MIT License.
 Copyright (c) Project Nayuki.
 https://www.nayuki.io/page/qr-code-generator-library
 The upstream copyright and full MIT permission notice are retained in public/qr.js.
+
+The locally bundled Markdown parser in public/vendor/marked.umd.js is Marked
+18.1.2, licensed under the MIT License. Copyright MarkedJS and Christopher Jeffrey.
+The upstream license notices are retained in public/vendor/marked.LICENSE.
+https://github.com/markedjs/marked
