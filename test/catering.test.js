@@ -42,6 +42,78 @@ test('catering: self signup, admin assignment/payment, private lists and retaine
   assert.equal((await app.request('/api/catering/admin', { admin: true })).data.entries.length, 2);
 });
 
+test('catering: opted-in price updates reprice only unpaid entries of the selected offer', async (t) => {
+  const app = await setup(t), offer = await app.offer(), other = await app.offer();
+  const unpaid = (await app.signup(offer.id, 'person:buyer')).data;
+  const paid = (await app.signup(offer.id, 'person:other', 'other')).data;
+  const unrelated = (await app.signup(other.id, 'person:buyer')).data;
+  const payment = await app.request('/api/catering/entries/' + paid.id, { method: 'PUT', admin: true, body: { paid: true, version: paid.version } });
+  assert.equal(payment.status, 200);
+  const update = await app.request('/api/catering/offers/' + offer.id, { method: 'PUT', admin: true,
+    body: { price: 2000, version: offer.version, updateUnpaidPrices: true } });
+  assert.equal(update.status, 200, update.text);
+  const data = (await app.request('/api/catering/admin', { admin: true })).data;
+  const revised = data.entries.find((e) => e.id === unpaid.id);
+  assert.equal(revised.price, 2000);
+  assert.equal(revised.version, unpaid.version + 1);
+  assert.deepEqual(data.entries.find((e) => e.id === paid.id), payment.data);
+  assert.deepEqual(data.entries.find((e) => e.id === unrelated.id), unrelated);
+  assert.equal((await app.request('/api/catering', { user: 'buyer' })).data.entries.find((e) => e.id === unpaid.id).price, 2000);
+  assert.equal(app.snapshot().events[0].catering.entries.find((e) => e.id === unpaid.id).price, 2000);
+  assert.equal((await app.request('/api/catering/entries/' + unpaid.id, { method: 'PUT', admin: true,
+    body: { paid: true, version: unpaid.version } })).status, 409);
+  assert.equal((await app.request('/api/catering/entries/' + unpaid.id, { method: 'DELETE', user: 'buyer',
+    body: { version: unpaid.version } })).status, 409);
+});
+
+test('catering: bulk price option rejects invalid values without changing any saved data', async (t) => {
+  const app = await setup(t), offer = await app.offer();
+  await app.signup(offer.id, 'person:buyer');
+  const before = app.snapshot();
+  for (const updateUnpaidPrices of ['true', 'false', 1, 0, null, {}, []]) {
+    const response = await app.request('/api/catering/offers/' + offer.id, { method: 'PUT', admin: true,
+      body: { price: 2000, version: offer.version, updateUnpaidPrices } });
+    assert.equal(response.status, 400, JSON.stringify(updateUnpaidPrices));
+    assert.deepEqual(app.snapshot(), before);
+  }
+});
+
+test('catering: repricing is optional, supports free offers and invalidates only changed entries', async (t) => {
+  const app = await setup(t), offer = await app.offer();
+  const entry = (await app.signup(offer.id, 'person:buyer')).data;
+  const url = '/api/catering/offers/' + offer.id;
+  assert.equal((await app.request(url, { method: 'PUT', admin: true,
+    body: { price: 2000, version: 1, updateUnpaidPrices: false } })).status, 200);
+  assert.deepEqual((await app.request('/api/catering/admin', { admin: true })).data.entries[0], entry);
+  assert.equal((await app.request(url, { method: 'PUT', admin: true,
+    body: { price: 1250, version: 2, updateUnpaidPrices: true } })).status, 200);
+  assert.deepEqual((await app.request('/api/catering/admin', { admin: true })).data.entries[0], entry);
+  assert.equal((await app.request(url, { method: 'PUT', admin: true,
+    body: { price: 0, version: 3, updateUnpaidPrices: true } })).status, 200);
+  const revised = (await app.request('/api/catering/admin', { admin: true })).data.entries[0];
+  assert.equal(revised.price, 0); assert.equal(revised.version, 2); assert.equal(revised.paidAt, null);
+});
+
+test('catering: staged repricing respects current payment state and event/admin boundaries', async (t) => {
+  const app = await setup(t), offer = await app.offer();
+  const entry = (await app.signup(offer.id, 'person:buyer')).data;
+  const url = '/api/catering/offers/' + offer.id;
+  const body = { price: 2000, version: 1, updateUnpaidPrices: true };
+  for (const options of [{ user: 'buyer' }, { admin: true, headers: { Origin: 'https://foreign.invalid' } },
+    { admin: true, headers: { 'X-Event': 'second' } }]) {
+    const response = await app.request(url, { ...options, method: 'PUT', body });
+    assert.equal(response.status, options.user ? 401 : options.headers.Origin ? 403 : 404);
+  }
+  const pending = app.staged(url, { method: 'PUT', admin: true, body });
+  await pause();
+  const payment = await app.request('/api/catering/entries/' + entry.id, { method: 'PUT', admin: true,
+    body: { paid: true, version: 1 } });
+  assert.equal(payment.status, 200);
+  pending.finish(); assert.equal((await pending.done).status, 200);
+  assert.deepEqual((await app.request('/api/catering/admin', { admin: true })).data.entries[0], payment.data);
+  assert.equal((await app.request(url, { method: 'PUT', admin: true, body })).status, 409);
+});
+
 test('catering: anonymous/fremde guests cannot assign, pay or cancel; CSRF and payment spoofing rejected', async (t) => {
   const app = await setup(t), offer = await app.offer();
   const entry = (await app.signup(offer.id, 'person:buyer')).data;

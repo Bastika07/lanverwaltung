@@ -5,6 +5,45 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
+test('catering: admin price propagation is opt-in and sent only when editing', async () => {
+  const root = path.resolve(__dirname, '../public');
+  const offer = { id: 'offer', title: 'Buffet', description: '', price: 1250, capacity: 0, open: true, version: 1 };
+  for (const editing of [false, true]) {
+    for (const checked of [false, true]) {
+      const calls = [], elements = {};
+      const app = { innerHTML: '', querySelectorAll() { return []; } };
+      const fields = { title: { value: 'Buffet' }, description: { value: '' }, price: { value: '20.00' },
+        capacity: { value: '0' }, servingAt: { value: '' }, deadline: { value: '' }, open: { checked: true },
+        updateUnpaidPrices: { checked } };
+      const button = {};
+      elements.app = app;
+      elements.cateringOfferForm = { elements: fields, querySelector() { return button; } };
+      elements.cFilter = {}; elements.cEntries = {}; elements.cOfferError = {};
+      const context = vm.createContext({ views: {}, adminViews: {}, location: {},
+        document: { getElementById(id) { return elements[id]; } },
+        async api(method, url, body) {
+          if (method === 'GET') return { offers: [offer], entries: [], guests: [] };
+          calls.push({ method, url, body });
+        }, adminTabs: () => '', markdownHelp: () => '', toLocalInput: () => '', toast() {}, async render() {},
+      });
+      const encoder = fs.readFileSync(path.join(root, 'app.js'), 'utf8').split('\n').find((line) => line.startsWith('const esc ='));
+      vm.runInContext(encoder, context);
+      vm.runInContext(fs.readFileSync(path.join(root, 'catering.js'), 'utf8'), context);
+      await context.adminViews.catering.render(editing ? offer.id : undefined);
+      if (editing) {
+        assert.match(app.innerHTML, /<input[^>]*name="updateUnpaidPrices"[^>]*type="checkbox"[^>]*>/);
+        const checkbox = app.innerHTML.match(/<input[^>]*name="updateUnpaidPrices"[^>]*>/)[0];
+        assert.ok(!checkbox.includes('checked'), 'price propagation must default to off');
+      } else assert.ok(!app.innerHTML.includes('name="updateUnpaidPrices"'));
+      await elements.cateringOfferForm.onsubmit({ preventDefault() {}, target: elements.cateringOfferForm });
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].method, editing ? 'PUT' : 'POST');
+      assert.equal(calls[0].body.price, 2000);
+      assert.equal(calls[0].body.updateUnpaidPrices, editing ? checked : undefined);
+    }
+  }
+});
+
 test('catering: real offer/entry builders escape guest/admin text and expose payment controls only for admin', () => {
   const root = path.resolve(__dirname, '../public');
   const context = vm.createContext({ views: {}, adminViews: {}, document: { addEventListener() {} } });

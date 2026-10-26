@@ -74,7 +74,7 @@ views.catering = {
       ${data.over ? '<p class="hint">Dieses Event ist beendet. Neue Selbstanmeldungen sind geschlossen.</p>' : ''}
       <div class="grid">${data.offers.length ? data.offers.map((o) => cateringOffer(o, data)).join('') : '<div class="empty">Noch keine Catering-Angebote vorhanden.</div>'}</div>
       ${data.loggedIn ? `<section class="card"><h2>Meine Anmeldungen</h2>${cateringEntries(data)}
-        <p class="hint">Bereits bezahlte Anmeldungen oder Änderungen nach Anmeldeschluss bitte mit der Orga klären. Bei Preisänderungen bleibt der Betrag deiner bestehenden Anmeldung erhalten.</p></section>` : ''}`;
+        <p class="hint">Bereits bezahlte Anmeldungen oder Änderungen nach Anmeldeschluss bitte mit der Orga klären. Die Orga kann Preisänderungen auf noch unbezahlte Anmeldungen übernehmen. Bereits bezahlte Beträge bleiben unverändert.</p></section>` : ''}`;
     app.querySelectorAll('[data-catering-signup]').forEach((form) => {
       form.onsubmit = async (ev) => {
         ev.preventDefault(); const button = form.querySelector('button'); button.disabled = true;
@@ -109,7 +109,8 @@ adminViews.catering = {
           <div class="field"><label for="cServing">Ausgabezeit (optional)</label><input id="cServing" name="servingAt" type="datetime-local" value="${esc(toLocalInput(offer.servingAt))}"></div>
           <div class="field"><label for="cDeadline">Anmeldeschluss (optional)</label><input id="cDeadline" name="deadline" type="datetime-local" value="${esc(toLocalInput(offer.deadline))}"></div>
           <label class="check field"><input name="open" type="checkbox" ${offer.open ? 'checked' : ''}> Selbstanmeldung geöffnet</label>
-          <p class="hint">Preisänderungen gelten nur für neue Anmeldungen. Bestehende Beträge und Zahlungen bleiben erhalten.</p>
+          ${edit ? '<label class="check field"><input name="updateUnpaidPrices" type="checkbox"> Neuen Preis auch für bestehende unbezahlte Anmeldungen übernehmen</label>' : ''}
+          <p class="hint">Ohne Preisübernahme gelten Änderungen nur für neue Anmeldungen. Bereits bezahlte Beträge und Zahlungen bleiben immer unverändert.</p>
           <p class="error" id="cOfferError" role="alert"></p><button class="primary" type="submit">${edit ? 'Speichern' : 'Angebot anlegen'}</button>
           ${edit ? '<a class="btn" href="#/admin/catering">Abbrechen</a>' : ''}
         </form></section>
@@ -141,7 +142,8 @@ adminViews.catering = {
       try {
         const body = { title: fields.title.value, description: fields.description.value, price: Math.round(Number(fields.price.value) * 100),
           capacity: Number(fields.capacity.value), servingAt: fields.servingAt.value ? new Date(fields.servingAt.value).toISOString() : null,
-          deadline: fields.deadline.value ? new Date(fields.deadline.value).toISOString() : null, open: fields.open.checked, ...(edit ? { version: edit.version } : {}) };
+          deadline: fields.deadline.value ? new Date(fields.deadline.value).toISOString() : null, open: fields.open.checked,
+          ...(edit ? { version: edit.version, updateUnpaidPrices: fields.updateUnpaidPrices.checked } : {}) };
         await api(edit ? 'PUT' : 'POST', '/catering/offers' + (edit ? '/' + edit.id : ''), body);
         toast('Angebot gespeichert'); if (edit) location.hash = '#/admin/catering'; else await render();
       } catch (err) { document.getElementById('cOfferError').textContent = err.message; button.disabled = false; }
