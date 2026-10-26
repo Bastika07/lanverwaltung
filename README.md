@@ -12,6 +12,8 @@ Es braucht keine npm-Installation, nur Node.js (ab Version 22.16). Der Markdown-
 
 **Markdown:** Infos, Eventdetails, Programmhinweise, Ticket-/Catering-/Gastserver-Beschreibungen und Website-Texte unterstützen Formatierungen mit Hilfe und Live-Vorschau. Beispiele: [docs/markdown.md](docs/markdown.md).
 
+**CI / Codeprüfung:** GitHub Actions führt Syntax-/JSON-Prüfungen, CodeQL, Unit-Tests, die vollständige `npm test`-Suite und isolierte Integrationstests aus. Lokale Befehle und Testaufteilung: [docs/continuous-integration.md](docs/continuous-integration.md).
+
 ## Events
 
 Das System verwaltet mehrere LAN-Events (z. B. „Seniorenlan #12“, „#13“) im Admin-Reiter **Events**.
