@@ -4,7 +4,8 @@ GitHub Actions prüft Pushes auf `main`, Pull Requests gegen `main` und manuelle
 
 | Workflow | Prüfung | Laufzeit |
 | --- | --- | --- |
-| Code checks | JavaScript-Syntax aller eigenen JS/CJS/MJS-Dateien und Projekt-JSON; actionlint für Workflows; CodeQL für JavaScript/TypeScript | Node 22/24 auf Ubuntu; CodeQL ohne Build |
+| Code checks | JavaScript-Syntax aller eigenen JS/CJS/MJS-Dateien und Projekt-JSON; actionlint für Workflows | Node 22/24 auf Ubuntu |
+| CodeQL Advanced | Sicherheitsanalyse für JavaScript/TypeScript und das Python-Hilfsskript | Ubuntu, ohne Build |
 | Unit tests | Rendering/Markdown, Datenschutzlogik, Website-Modul mit Testkontext und CI-Testauswahl | Node 22/24 auf Ubuntu und Windows |
 | npm tests (full suite) | Unveränderte vollständige `npm test`-Testsuite | Node 22/24 auf Ubuntu |
 | Integration tests | Echter HTTP-Server, SQLite/Dateisystem, Migrationen, Parallelität, Catering und Sicherheits-/Proxy-Grenzen | Node 22/24 auf Ubuntu |
