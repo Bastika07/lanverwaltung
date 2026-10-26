@@ -1,3 +1,4 @@
+[![CodeQL Advanced](https://github.com/Bastika07/lanverwaltung/actions/workflows/codeql.yml/badge.svg)](https://github.com/Bastika07/lanverwaltung/actions/workflows/codeql.yml)
 # 🎮 LAN-System
 
 Selbstgehostetes System für LAN-Partys mit Turnieren, Durchsagen, Programm, Infos, Teilnehmerliste und Sitzplan, dazu ein Beamer-Infoscreen und ein Discord-Bot.
