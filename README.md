@@ -1,3 +1,4 @@
+[![Code checks](https://github.com/Bastika07/lanverwaltung/actions/workflows/code-checks.yml/badge.svg)](https://github.com/Bastika07/lanverwaltung/actions/workflows/code-checks.yml)
 [![CodeQL Advanced](https://github.com/Bastika07/lanverwaltung/actions/workflows/codeql.yml/badge.svg)](https://github.com/Bastika07/lanverwaltung/actions/workflows/codeql.yml)
 # 🎮 LAN-System
 
