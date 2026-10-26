@@ -1,0 +1,9 @@
+{
+  "name": "lan-system",
+  "version": "2.0.0",
+  "description": "Selbstgehostetes LAN-Party-System: Turniere, Durchsagen, Programm, Infos, Teilnehmer & Sitzplan, Beamer und Discord-Bot",
+  "main": "server.js",
+  "scripts": { "start": "node server.js", "test": "node --test" },
+  "engines": { "node": ">=22.16" },
+  "license": "MIT"
+}

@@ -1,0 +1,9 @@
+data/
+node_modules/
+.env
+.claude/
+image-vulnerabilities*.json
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite-journal

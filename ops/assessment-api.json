@@ -1,0 +1,22 @@
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Seniorenlan bounded isolated assessment", "version": "1" },
+  "servers": [{ "url": "http://127.0.0.1:3000" }],
+  "paths": {
+    "/api/me": { "get": { "responses": { "200": { "description": "Current role" } } } },
+    "/api/people": { "get": { "responses": { "200": { "description": "Public people" } } } },
+    "/api/tickets": { "get": { "responses": { "200": { "description": "Sale" } } } },
+    "/api/tickets/mine": { "get": { "responses": { "200": { "description": "Own orders" } } } },
+    "/api/tournaments/match": { "get": { "responses": { "200": { "description": "Tournament" } } } },
+    "/api/tickets/orders/first-buyer/holders": {
+      "put": {
+        "requestBody": { "content": { "application/json": { "schema": {
+          "type": "object", "properties": { "holders": { "type": "object", "properties": {
+            "first-ticket-buyer": { "type": "string", "example": "Synthetic buyer" }
+          } } }
+        } } } },
+        "responses": { "200": { "description": "Own holder changed" } }
+      }
+    }
+  }
+}

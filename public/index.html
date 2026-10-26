@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LAN-Party</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a href="#/" class="brand" id="brand">🎮 LAN-Party</a>
+    <nav id="nav"></nav>
+  </header>
+  <div id="banner" hidden></div>
+  <main id="app"></main>
+  <footer id="websiteFooter" class="website-footer" aria-label="Rechtliches und Sponsoren" hidden></footer>
+  <section id="cookieNotice" class="cookie-notice" aria-labelledby="cookieNoticeTitle" hidden></section>
+  <div id="overlay" hidden></div>
+
+  <dialog id="matchDialog">
+    <form method="dialog" id="matchForm">
+      <h3 id="mdTitle">Ergebnis eintragen</h3>
+      <div class="score-grid" id="mdInputs">
+        <label for="mdA" id="mdNameA"></label>
+        <input type="number" id="mdA" min="0" max="9999" inputmode="numeric" required>
+        <label for="mdB" id="mdNameB"></label>
+        <input type="number" id="mdB" min="0" max="9999" inputmode="numeric" required>
+      </div>
+      <div class="md-confirm" id="mdConfirm" hidden></div>
+      <p class="hint" id="mdHint"></p>
+      <p class="error" id="mdError"></p>
+      <div class="actions">
+        <button type="button" class="danger" id="mdReset" hidden>Ergebnis löschen</button>
+        <span class="spacer"></span>
+        <button type="button" id="mdCancel">Abbrechen</button>
+        <button type="submit" class="primary" id="mdSave">Speichern</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/bracket.js"></script>
+  <script src="/app.js"></script>
+  <script src="/announce.js"></script>
+  <script src="/schedule.js"></script>
+  <script src="/info.js"></script>
+  <script src="/details.js"></script>
+  <script src="/servers.js"></script>
+  <script src="/people.js"></script>
+  <script src="/settings.js"></script>
+  <script src="/events.js"></script>
+  <script src="/qr.js"></script>
+  <script src="/tickets.js"></script>
+  <script src="/catering.js"></script>
+  <script src="/beamer.js"></script>
+  <script src="/website.js"></script>
+</body>
+</html>

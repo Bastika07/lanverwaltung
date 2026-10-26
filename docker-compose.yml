@@ -1,0 +1,54 @@
+services:
+  turnierbaum:
+    build: .
+    image: turnierbaum:latest
+    container_name: turnierbaum
+    restart: unless-stopped
+    # Härtung: Dateisystem schreibgeschützt (außer /data), keine Linux-Capabilities, keine Rechteausweitung
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:3000"
+    environment:
+      # Admin-Bereich: Anmeldung mit Discord für alle mit der Admin-Rolle (braucht Bot und DISCORD_CLIENT_SECRET).
+      # Die Rolle steht in den Einstellungen, Startwert hier. Das Passwort ist nur ein optionaler Notzugang.
+      ADMIN_DISCORD_ROLE: ${ADMIN_DISCORD_ROLE:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      # Optional: Discord-Voice-Kanäle pro Turnier (leer lassen = aus)
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN:-}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID:-}
+      # Optional: "Mit Discord anmelden" für den Ticketverkauf (Developer Portal -> OAuth2 -> Client Secret)
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET:-}
+      # Optional: feste Textkanäle für Ansagen (sonst werden #lan-ansagen und #turnier-ansagen angelegt)
+      DISCORD_ANNOUNCE_CHANNEL_ID: ${DISCORD_ANNOUNCE_CHANNEL_ID:-}
+      DISCORD_TOURNAMENT_CHANNEL_ID: ${DISCORD_TOURNAMENT_CHANNEL_ID:-}
+      # Optional: Adresse der Seite für Links in Discord-Ansagen, z. B. http://192.168.1.10:3000
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      # Hinter einem Reverse Proxy auf 1 setzen: dann gelten X-Forwarded-For/-Proto
+      # (echte Client-IP für Rate-Limits, Secure-Cookies und HSTS bei HTTPS)
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-}
+      PROXY_ONLY: ${PROXY_ONLY:-0}
+      # Optional: Startwerte (danach im Admin-Bereich unter "Einstellungen" änderbar)
+      EVENT_NAME: ${EVENT_NAME:-}
+      OLA_URL: ${OLA_URL:-}
+      DMX_UNIVERSE: ${DMX_UNIVERSE:-}
+      DMX_RED_CHANNEL: ${DMX_RED_CHANNEL:-}
+      DMX_RESET_SECONDS: ${DMX_RESET_SECONDS:-}
+      ANNOUNCE_ROLE_NAME: ${ANNOUNCE_ROLE_NAME:-}
+    volumes:
+      - turnierbaum-data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  turnierbaum-data:
