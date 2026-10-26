@@ -1,0 +1,60 @@
+name: Container security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    name: Docker build, smoke test and Trivy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build production image
+        run: docker build --label "org.opencontainers.image.revision=$GITHUB_SHA" -t lan-system:ci .
+      - name: Smoke test isolated image
+        shell: bash
+        run: |
+          docker run -d --name lan-ci-smoke --network none --read-only \
+            --tmpfs /tmp --tmpfs /data:uid=1000,gid=1000 \
+            --cap-drop ALL --security-opt no-new-privileges:true lan-system:ci
+          for attempt in $(seq 1 30); do
+            if docker exec lan-ci-smoke node -e "fetch('http://127.0.0.1:3000/api/health',{signal:AbortSignal.timeout(2000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo 'Container health check failed' >&2
+          exit 1
+      - name: Scan image and reject HIGH or CRITICAL vulnerabilities
+        id: scan
+        run: |
+          mkdir -p reports
+          sh ops/scan-image.sh lan-system:ci reports/image-vulnerabilities.json
+      - name: Preserve Trivy report even when vulnerability gate fails
+        if: ${{ always() && steps.scan.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: trivy-image-${{ github.sha }}
+          path: reports/image-vulnerabilities.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove isolated smoke-test container
+        if: ${{ always() }}
+        run: docker rm -f lan-ci-smoke >/dev/null 2>&1 || true

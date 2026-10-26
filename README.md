@@ -3,6 +3,10 @@
 [![Integration tests](https://github.com/Bastika07/lanverwaltung/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/Bastika07/lanverwaltung/actions/workflows/integration-tests.yml)
 [![Code checks](https://github.com/Bastika07/lanverwaltung/actions/workflows/code-checks.yml/badge.svg)](https://github.com/Bastika07/lanverwaltung/actions/workflows/code-checks.yml)
 [![CodeQL Advanced](https://github.com/Bastika07/lanverwaltung/actions/workflows/codeql.yml/badge.svg)](https://github.com/Bastika07/lanverwaltung/actions/workflows/codeql.yml)
+[![Container security](https://github.com/Bastika07/lanverwaltung/actions/workflows/container-security.yml/badge.svg?branch=main)](https://github.com/Bastika07/lanverwaltung/actions/workflows/container-security.yml)
+[![License: MIT](https://img.shields.io/github/license/Bastika07/lanverwaltung)](LICENSE)
+[![Node.js ≥22.16](https://img.shields.io/badge/Node.js-%E2%89%A522.16-339933?logo=node.js&logoColor=white)](package.json)
+
 # 🎮 LAN-System
 
 Selbstgehostetes System für LAN-Partys mit Turnieren, Durchsagen, Programm, Infos, Teilnehmerliste und Sitzplan, dazu ein Beamer-Infoscreen und ein Discord-Bot.
