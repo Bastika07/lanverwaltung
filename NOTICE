@@ -1,0 +1,11 @@
+LAN-Verwaltung
+Copyright 2026 Sebastian Lübke
+
+Licensed under the MIT License.
+See LICENSE for the full license text.
+
+The QR code implementation in public/qr.js is adapted from the reference
+implementation by Project Nayuki, licensed under the MIT License.
+Copyright (c) Project Nayuki.
+https://www.nayuki.io/page/qr-code-generator-library
+The upstream copyright and full MIT permission notice are retained in public/qr.js.

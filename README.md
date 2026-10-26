@@ -225,3 +225,9 @@ Nicht die laufende SQLite-Hauptdatei allein kopieren: Änderungen können im WAL
 - Admin-Sitzungen liegen nur im Arbeitsspeicher. Nach einem Neustart muss man sich neu anmelden.
 - Für den Gong muss am Beamer einmal auf 🔔 (oder Vollbild) geklickt werden, weil Browser Ton erst nach einer Interaktion erlauben.
 - Für den Betrieb im Internet sollte ein Reverse-Proxy mit HTTPS davor. Im LAN ist das nicht nötig.
+
+## Lizenz
+
+LAN-Verwaltung steht unter der **[MIT-Lizenz](LICENSE)**. Sie erlaubt private und kommerzielle Nutzung, Änderungen und Weiterverteilung. Der Urheberrechts- und Lizenzhinweis muss in allen Kopien oder wesentlichen Teilen der Software erhalten bleiben. Die Software wird ohne Gewährleistung bereitgestellt.
+
+Copyright 2026 Sebastian Lübke. Weitere Hinweise stehen in [NOTICE](NOTICE). Die auf Project Nayuki basierende QR-Code-Implementierung behält ihre MIT-Lizenz; der vollständige Hinweis steht in [public/qr.js](public/qr.js). Lizenzen der Container-Basis und mitgelieferter Laufzeitkomponenten gelten unabhängig davon weiter.

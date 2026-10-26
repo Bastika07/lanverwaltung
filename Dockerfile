@@ -2,7 +2,8 @@
 FROM node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914
 
 LABEL org.opencontainers.image.title="Turnierbaum" \
-      org.opencontainers.image.description="Selbstgehosteter Turnierbaum / Turnierplan"
+      org.opencontainers.image.description="Selbstgehosteter Turnierbaum / Turnierplan" \
+      org.opencontainers.image.licenses="MIT"
 
 ENV NODE_ENV=production \
     PORT=3000 \
@@ -13,7 +14,7 @@ WORKDIR /app
 # Keine Paketinstallation zur Laufzeit: unbenutzte npm-/Corepack-/Yarn-Bundles entfernen.
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-v* \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
-COPY package.json server.js ./
+COPY package.json server.js LICENSE NOTICE ./
 COPY lib ./lib
 COPY public ./public
 
