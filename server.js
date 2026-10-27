@@ -177,6 +177,9 @@ function isAdmin(req) {
 
 function checkPassword(pw) {
   if (!ADMIN_PASSWORD || typeof pw !== 'string') return false;
+  // Ephemeral fixed-length comparison digests, not stored password verifiers.
+  // Neither digest is persisted/logged; timingSafeEqual needs equal byte lengths.
+  // Future persisted password verifiers must use a salted password KDF (scrypt/Argon2).
   const a = crypto.createHash('sha256').update(String(pw)).digest();
   const b = crypto.createHash('sha256').update(ADMIN_PASSWORD).digest();
   return crypto.timingSafeEqual(a, b);
@@ -276,7 +279,7 @@ function discordTask(t, fn) {
       await fn();
       t.discordStatus = { state: 'ok', at: new Date().toISOString() };
     } catch (err) {
-      console.error(`Discord (${t.name}):`, err.message);
+      console.error('Discord (%s): %s', t.name, err.message);
       t.discordStatus = { state: 'error', error: err.message, at: new Date().toISOString() };
     }
     if (allTournaments().includes(t)) { save(); broadcast('tournament', t.id); }
