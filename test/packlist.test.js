@@ -111,7 +111,7 @@ test('packlist: admin textarea loads escaped text and submits a multiline replac
   assert.match(f.elements.app.innerHTML, /textarea id="iPacklist"[^>]*maxlength="10000"/);
   assert.ok(f.elements.app.innerHTML.includes('Kabel\n&lt;/textarea&gt;&lt;script&gt;'));
   assert.equal(f.elements.iPacklist.value, info.packlist);
-  assert.doesNotMatch(f.elements.app.innerHTML, /<script>|type="checkbox"/);
+  assert.doesNotMatch(f.elements.app.innerHTML, /<(?:script|iframe|object|embed|img)\b|type\s*=\s*["']checkbox\b/i);
   f.elements.iPacklist.value = 'Neue Liste\nLAN-Kabel';
   await f.elements.infoForm.onsubmit({ preventDefault() {} });
   assert.equal(f.calls.find((c) => c.method === 'PUT').body.packlist, 'Neue Liste\nLAN-Kabel');
