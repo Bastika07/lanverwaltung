@@ -22,10 +22,12 @@ test('assessment: actual frontend encoders and selected HTML builders escape hos
       assert.ok(!/href="javascript:/i.test(html));
     }
   }
-  for (const value of ['javascript:alert(1)', 'data:text/html,test', 'JaVaScRiPt:alert(1)', '//example.invalid', ' https://example.invalid']) {
+  for (const value of ['javascript:alert(1)', 'vbscript:msgbox(1)', 'data:text/html,test', 'JaVaScRiPt:alert(1)', '//example.invalid', ' https://example.invalid']) {
     assert.equal(helpers.safeUrl(value), null);
-    assert.equal(helpers.sponsorUrl(value).startsWith('javascript:'), false);
   }
+  for (const value of ['javascript:alert(1)', 'vbscript:msgbox(1)', 'data:text/html,test', 'JaVaScRiPt:alert(1)', 'http://example.invalid', 'ftp://example.invalid', '//example.invalid', 'https://user:password@example.invalid', 'https://user@example.invalid', 'https://:password@example.invalid', '', 'not a URL']) {
+    assert.equal(helpers.sponsorUrl(value), '');
+  }
+  assert.equal(helpers.sponsorUrl('https://example.invalid/sponsor'), 'https://example.invalid/sponsor');
   assert.equal(helpers.steamUrl('javascript:alert(1)'), null);
-  assert.equal(helpers.sponsorUrl('https://user:password@example.invalid'), '');
 });

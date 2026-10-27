@@ -9,10 +9,15 @@ function websiteLegalLinks(keys) {
   return links.length ? `<p class="hint">${links.join(' · ')}</p>` : '';
 }
 const sponsorUrl = (value) => { try { const u = new URL(value); return u.protocol === 'https:' && !u.username && !u.password ? u.href : ''; } catch { return ''; } };
+function sponsorImage(entry) {
+  const image = entry.image;
+  if (!image || !/^\/api\/website\/sponsor-images\/[a-f0-9]{32}$/.test(image.url) || !Number.isInteger(image.width) || !Number.isInteger(image.height) || image.width < 1 || image.height < 1 || image.width > 2048 || image.height > 2048) return '';
+  return `<img class="sponsor-image" src="${esc(image.url)}" width="${image.width}" height="${image.height}" alt="${esc(`Logo von ${entry.name}`)}" loading="lazy" decoding="async">`;
+}
 function sponsorCards(entries) {
   return `<div class="grid">${entries.map((s) => {
     const url = sponsorUrl(s.url);
-    return `<article class="card sponsor-card">${s.tier ? `<span class="badge">${esc(s.tier)}</span>` : ''}<h2>${esc(s.name)}</h2>
+    return `<article class="card sponsor-card">${sponsorImage(s)}${s.tier ? `<span class="badge">${esc(s.tier)}</span>` : ''}<h2>${esc(s.name)}</h2>
       ${websiteText(s.description)}${url ? `<p><a href="${esc(url)}" target="_blank" rel="sponsored noopener noreferrer">Website besuchen ↗</a></p>` : ''}</article>`;
   }).join('')}</div>`;
 }
@@ -86,7 +91,7 @@ homeCards.push({ order: 95, async render() {
   return Website.sponsors && Website.sponsors.entries.length ? `<section><h2>Unsere Sponsoren</h2>${sponsorCards(Website.sponsors.entries)}</section>` : '';
 } });
 
-adminViews.website = { label: 'Website & Rechtliches', order: 85, events: ['website'], async render() {
+adminViews.website = { label: 'Website & Rechtliches', order: 85, events: ['website'], preserveDraft: true, async render() {
   const s = await api('GET', '/website/admin');
   const app = document.getElementById('app');
   app.innerHTML = `${adminTabs('website')}<form id="websiteForm" class="editor">
@@ -105,43 +110,86 @@ adminViews.website = { label: 'Website & Rechtliches', order: 85, events: ['webs
     <section class="card"><h2>Sponsoren</h2>
       <label class="check"><input id="web_sponsors_on" type="checkbox" ${s.sponsors.enabled ? 'checked' : ''}> Sponsoren auf Startseite und eigener Seite veröffentlichen</label>
       <div class="field"><label for="web_sponsor_text">Einleitung (Markdown)</label><textarea id="web_sponsor_text" maxlength="5000">${esc(s.sponsors.text)}</textarea>${markdownHelp('web_sponsor_text')}</div>
-      <p class="hint">Name, Kategorie, Beschreibung und optionaler HTTPS-Link. Keine extern geladenen Logos oder Tracker. Reihenfolge per Pfeil ändern.</p>
+      <p class="hint">Name, Kategorie, Beschreibung und optionaler HTTPS-Link. Ein optionales lokales PNG je Sponsor, keine externen Logos oder Tracker. Maximal 128 KiB, 2048 × 2048 und 1.048.576 Pixel; nur 8-Bit RGB/RGBA, nicht interlaced oder animiert. Andere PNGs vorher als RGB/RGBA exportieren. Reihenfolge per Pfeil ändern. Bildänderungen werden sofort gespeichert; bei veröffentlichten Sponsoren sofort öffentlich. Neue Sponsoren zuerst unten speichern.</p>
       <div id="sponsorEditors"></div><button type="button" id="sponsorAdd">Sponsor hinzufügen</button></section>
     <div class="card"><p class="hint">AGB und Verhaltenskodex werden als Informationsseiten veröffentlicht. Dieses Modul erfasst keine vertragliche Zustimmung beim Ticketkauf.</p>
       <p class="error" id="websiteError" role="alert"></p><button type="submit" class="primary big">Website-Module speichern</button></div></form>`;
   let entries = structuredClone(s.sponsors.entries);
   const editors = document.getElementById('sponsorEditors');
+  let busy = false;
+  const disabledControls = new Map();
+  function disableControls() {
+    document.getElementById('websiteForm').querySelectorAll('input, textarea, select, button').forEach((el) => {
+      disabledControls.set(el, el.disabled); el.disabled = true;
+    });
+  }
+  function restoreControls() {
+    disabledControls.forEach((disabled, el) => { el.disabled = disabled; });
+    disabledControls.clear();
+  }
   function readEntries() {
-    return [...editors.querySelectorAll('[data-sponsor]')].map((box) => {
+    return [...editors.querySelectorAll('[data-sponsor]')].map((box, i) => {
       const value = (key) => box.querySelector(`[data-field="${key}"]`).value;
-      return { name: value('name'), tier: value('tier'), url: value('url'), description: value('description'), enabled: box.querySelector('[data-field="enabled"]').checked };
+      return { id: entries[i].id, image: entries[i].image, name: value('name'), tier: value('tier'), url: value('url'), description: value('description'), enabled: box.querySelector('[data-field="enabled"]').checked };
     });
   }
   function drawEntries() {
+    // Re-snapshot after redraw so fresh controls retain their natural disabled states.
+    restoreControls();
     editors.innerHTML = entries.map((entry, i) => `<fieldset class="sponsor-editor" data-sponsor="${i}"><legend>Sponsor ${i + 1}</legend>
       <label class="check"><input type="checkbox" data-field="enabled" ${entry.enabled ? 'checked' : ''}> Sichtbar bei veröffentlichtem Modul</label>
       <div class="row two-inputs"><div class="field"><label for="sponsor_${i}_name">Name</label><input id="sponsor_${i}_name" data-field="name" maxlength="120" required value="${esc(entry.name)}"></div>
       <div class="field"><label for="sponsor_${i}_tier">Kategorie (z. B. Gold)</label><input id="sponsor_${i}_tier" data-field="tier" maxlength="80" value="${esc(entry.tier)}"></div></div>
       <div class="field"><label for="sponsor_${i}_url">HTTPS-Link (optional)</label><input id="sponsor_${i}_url" data-field="url" type="url" maxlength="1000" value="${esc(entry.url)}" placeholder="https://..."></div>
       <div class="field"><label for="sponsor_${i}_description">Beschreibung (Markdown)</label><textarea id="sponsor_${i}_description" data-field="description" maxlength="2000">${esc(entry.description)}</textarea>${markdownHelp(`sponsor_${i}_description`)}</div>
+      <div class="sponsor-image-preview">${sponsorImage(entry)}</div>
+      <div class="field"><label for="sponsor_${i}_image">PNG-Bild hochladen / ersetzen</label><input id="sponsor_${i}_image" type="file" accept="image/png" data-image-upload ${entry.id ? '' : 'disabled'}></div>
+      ${entry.id ? '' : '<p class="hint">Sponsor zuerst speichern, dann Bild hochladen.</p>'}
+      <button type="button" data-image-remove ${entry.image ? '' : 'disabled'}>Bild entfernen</button>
       <div class="row"><button type="button" data-move="up" aria-label="Sponsor ${i + 1} nach oben" ${i === 0 ? 'disabled' : ''}>↑</button>
       <button type="button" data-move="down" aria-label="Sponsor ${i + 1} nach unten" ${i === entries.length - 1 ? 'disabled' : ''}>↓</button>
       <button type="button" data-remove class="danger">Entfernen</button></div></fieldset>`).join('');
     editors.querySelectorAll('[data-sponsor]').forEach((box, i) => {
-      box.querySelector('[data-remove]').onclick = () => { if (!confirm('Sponsor aus diesem Entwurf entfernen? Wirksam nach dem Speichern.')) return; entries = readEntries(); entries.splice(i, 1); drawEntries(); };
+      box.querySelector('[data-image-upload]').onchange = () => changeImage(i, box.querySelector('[data-image-upload]').files[0]);
+      box.querySelector('[data-image-remove]').onclick = () => changeImage(i, null);
+      box.querySelector('[data-remove]').onclick = () => { if (busy || !confirm('Sponsor aus diesem Entwurf entfernen? Wirksam nach dem Speichern.')) return; entries = readEntries(); entries.splice(i, 1); drawEntries(); };
       box.querySelectorAll('[data-move]').forEach((button) => { button.onclick = () => {
+        if (busy) return;
         entries = readEntries(); const j = i + (button.dataset.move === 'up' ? -1 : 1);
         if (j >= 0 && j < entries.length) { [entries[i], entries[j]] = [entries[j], entries[i]]; drawEntries(); }
       }; });
     });
     document.getElementById('sponsorAdd').disabled = entries.length >= 40;
+    if (busy) disableControls();
+  }
+  async function changeImage(i, file) {
+    if (busy || file === undefined) return;
+    const error = document.getElementById('websiteError'); error.textContent = '';
+    entries = readEntries();
+    const entry = entries[i];
+    if (!entry.id) { error.textContent = 'Sponsor zuerst speichern'; return; }
+    if (file && (file.size > 128 * 1024 || (file.type && file.type !== 'image/png'))) { error.textContent = 'Nur PNG bis 128 KiB erlaubt'; return; }
+    busy = true; disableControls();
+    try {
+      const data = file ? await new Promise((resolve, reject) => {
+        const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]);
+        reader.onerror = () => reject(new Error('Bild konnte nicht gelesen werden')); reader.readAsDataURL(file);
+      }) : undefined;
+      const result = await api(file ? 'PUT' : 'DELETE', `/website/sponsors/${entry.id}/image`, { version: s.version, ...(file ? { data } : {}) });
+      s.version = result.version;
+      entries[i].image = result.sponsors.entries.find((e) => e.id === entry.id).image;
+      drawEntries(); await loadWebsite(); toast(file ? 'Bild gespeichert' : 'Bild entfernt');
+    } catch (err) { error.textContent = err.message; } finally {
+      restoreControls(); busy = false;
+    }
   }
   drawEntries();
-  document.getElementById('sponsorAdd').onclick = () => { entries = readEntries(); if (entries.length < 40) entries.push({ name: '', tier: '', url: '', description: '', enabled: true }); drawEntries(); };
+  document.getElementById('sponsorAdd').onclick = () => { if (busy) return; entries = readEntries(); if (entries.length < 40) entries.push({ name: '', tier: '', url: '', description: '', enabled: true }); drawEntries(); };
   document.getElementById('websiteForm').onsubmit = async (event) => {
     event.preventDefault();
+    if (busy) return;
     const error = document.getElementById('websiteError'); error.textContent = '';
-    const button = event.target.querySelector('[type="submit"]'); button.disabled = true;
+    busy = true; disableControls();
     try {
       const result = await api('PUT', '/website/admin', { version: s.version,
         pages: Object.fromEntries(Object.keys(WEBSITE_TITLES).map((key) => [key, { enabled: document.getElementById(`web_${key}_on`).checked, text: document.getElementById(`web_${key}_text`).value }])),
@@ -149,7 +197,8 @@ adminViews.website = { label: 'Website & Rechtliches', order: 85, events: ['webs
         sponsors: { enabled: document.getElementById('web_sponsors_on').checked, text: document.getElementById('web_sponsor_text').value, entries: readEntries() },
       });
       s.version = result.version;
+      entries = structuredClone(result.sponsors.entries); drawEntries();
       await loadWebsite(); toast('Website-Module gespeichert');
-    } catch (err) { error.textContent = err.message; } finally { button.disabled = false; }
+    } catch (err) { error.textContent = err.message; } finally { restoreControls(); busy = false; }
   };
 } };

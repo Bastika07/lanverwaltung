@@ -919,6 +919,9 @@ function connectEvents() {
     if (r.view === 'adminEdit' && ev.type === 'tournament' && r.id === ev.id) { refreshDiscordCard(ev.id).catch(() => {}); return; }
     if (dlg.open || document.activeElement?.closest?.('form, .editor')) return; // Eingaben nicht überschreiben
     const v = r.view.startsWith('admin:') ? adminViews[r.name] : views[r.view];
+    // Uploads can disable or replace focused controls; these editors own their drafts.
+    // Background handlers still run. Explicit navigation reloads the saved state.
+    if (v?.preserveDraft) return;
     const relevant = ev.type === 'settings'
       || r.view === 'beamer' || r.view === 'home'
       || (r.view === 'tournament' && ev.type === 'tournament' && r.id === ev.id)
