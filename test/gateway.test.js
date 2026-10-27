@@ -52,7 +52,9 @@ function harness({ url = 'wss://gateway.discord.gg/', gatewayResult } = {}) {
     }
     now = until; await flush();
   }
-  return { api, sockets, timers, logs, calls, flush, tick, async start() { await api.start(); await flush(); } };
+  return { api, sockets, timers, logs, calls, flush, tick,
+    scheduleHeartbeat: vm.runInContext('scheduleHeartbeat', context),
+    async start() { await api.start(); await flush(); } };
 }
 const hello = (socket, interval = 45000) => socket.message({ op: 10, d: { heartbeat_interval: interval } });
 const ready = (socket, url = 'wss://gateway.discord.gg/') => socket.message({ op: 0, t: 'READY', s: 42,
@@ -63,6 +65,9 @@ const unsafeTargets = [
   'wss://example.com/', 'wss://gateway.discord.gg.evil.test/', 'wss://evilgateway.discord.gg/',
   'wss://gateway.discord.gg@evil.test/', 'wss://user:secret@gateway.discord.gg/',
   'wss://gateway.discord.gg:8443/', 'wss://gateway.discord.gg./',
+  'wss://gateway-us-east1-b.discord.gg.evil.test/', 'wss://gateway--us-east1.discord.gg/',
+  'wss://gateway-us-east1-.discord.gg/', 'wss://gateway-us%2fevil.discord.gg/',
+  'wss://gateway-us-east1.discord.gg@evil.test/',
   'wss://gateway.discord.gg/not-gateway', 'wss://gateway.discord.gg/#fragment', '', null, 42,
 ];
 
@@ -117,6 +122,32 @@ test('heartbeat rejects unsafe intervals before timers or credentials are sent',
     sock.message({ op: 10, d: { heartbeat_interval: interval } });
     assert.equal(h.timers.size, 0, `invalid interval ${interval} must not create timers`);
     assert.equal(sock.sent.length, 0); assert.equal(sock.closes.length, 1);
+    h.api.stop(); assert.equal(h.timers.size, 0);
+  }
+});
+
+test('timer boundary rejects invalid delays even without the HELLO guard', () => {
+  const h = harness();
+  for (const delay of [-1, 120001, NaN, Infinity, -Infinity, undefined, null, '1000', {}]) {
+    assert.throws(() => h.scheduleHeartbeat(() => {}, delay), /Ungültige Heartbeat-Verzögerung/);
+    assert.equal(h.timers.size, 0);
+  }
+  for (const delay of [0, 0.5, 1000, 45000, 120000]) {
+    const handle = h.scheduleHeartbeat(() => {}, delay);
+    assert.equal(handle.ms, delay);
+    h.timers.clear();
+  }
+});
+
+test('heartbeat accepts both interval boundaries and maintains one timer', async () => {
+  for (const interval of [1000, 120000]) {
+    const h = harness(); await h.start(); const sock = h.sockets[0]; hello(sock, interval);
+    assert.equal(h.timers.size, 1);
+    assert.equal([...h.timers.values()][0].ms, interval / 2);
+    await h.tick(interval / 2);
+    assert.equal(sock.sent.filter((frame) => frame.op === 1).length, 1);
+    assert.equal(h.timers.size, 1);
+    assert.equal([...h.timers.values()][0].ms, interval);
     h.api.stop(); assert.equal(h.timers.size, 0);
   }
 });
