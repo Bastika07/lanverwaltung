@@ -59,12 +59,14 @@ views.infos = {
   label: 'Infos', module: 'info', events: ['info'],
   async render() {
     const i = await api('GET', '/info');
-    const empty = !hasWifi(i) && !i.servers.length && !i.games.length && !i.rules && !i.extra;
+    const hasPacklist = Boolean(i.packlist && i.packlist.trim());
+    const empty = !hasWifi(i) && !i.servers.length && !i.games.length && !i.rules && !i.extra && !hasPacklist;
     document.getElementById('app').innerHTML = `<div class="page-head"><h1>Infos</h1></div>
       ${empty ? '<div class="empty">Noch keine Infos eingetragen.</div>' : `<div class="two">
         <div>${wifiBlock(i)}${serverTable(i)}
           ${i.extra ? `<div class="card"><h2>ℹ️ Sonstiges</h2><div class="markdown">${richText(i.extra)}</div></div>` : ''}</div>
         <div>
+          ${hasPacklist ? `<div class="card"><h2>Pack-/Mitbringliste</h2><div class="packlist-text">${esc(i.packlist)}</div></div>` : ''}
           ${i.games.length ? `<div class="card"><h2>🎮 Spiele</h2><p class="meta">Bitte vorher installieren und aktualisieren.</p><ul class="games">
             ${i.games.map((g) => `<li><strong>${esc(g.name)}</strong>${safeUrl(g.link) ? ` <a href="${esc(safeUrl(g.link))}" target="_blank" rel="noopener noreferrer">↗</a>` : ''}${g.note ? `<div class="meta markdown">${richText(g.note)}</div>` : ''}</li>`).join('')}
           </ul></div>` : ''}
@@ -155,6 +157,8 @@ adminViews.infos = {
               ${listEditor('games', i.games, [{ key: 'name', label: 'Spiel', flex: 1.2 }, { key: 'note', label: 'Hinweis (z. B. Version, Mods)', flex: 2 }, { key: 'link', label: 'Link', flex: 1.4 }])}
             </div>
             <div class="card"><h2>📜 Hausregeln</h2><label for="iRules">Regeln (Markdown)</label><textarea id="iRules" class="short">${esc(i.rules)}</textarea>${markdownHelp('iRules')}</div>
+            <div class="card"><h2>Pack-/Mitbringliste</h2><label for="iPacklist">Mitbringen (Klartext, eine Zeile pro Eintrag)</label><textarea id="iPacklist" maxlength="10000">
+${esc(i.packlist || '')}</textarea><p class="meta">Bis zu 10000 Zeichen. Leer lassen, um die Liste auszublenden. Kein Markdown und keine persönlichen Abhakstände.</p></div>
           </div>
         </div>
         <p class="error" id="iError"></p>
@@ -166,7 +170,7 @@ adminViews.infos = {
       try {
         await api('PUT', '/info', {
           wifi: { ssid: v('wSsid'), password: v('wPw'), note: v('wNote') },
-          servers: readList('servers'), games: readList('games'), rules: v('iRules'), extra: v('iExtra'),
+          servers: readList('servers'), games: readList('games'), rules: v('iRules'), extra: v('iExtra'), packlist: v('iPacklist'),
         });
         toast('Infos gespeichert');
         document.activeElement.blur();
