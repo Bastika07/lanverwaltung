@@ -25,7 +25,7 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-.packlist-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.packlist-text { overflow-wrap: anywhere; }
 html, body { margin: 0; }
 body {
   background: var(--bg); color: var(--text);

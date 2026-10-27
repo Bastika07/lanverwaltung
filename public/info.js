@@ -66,7 +66,7 @@ views.infos = {
         <div>${wifiBlock(i)}${serverTable(i)}
           ${i.extra ? `<div class="card"><h2>ℹ️ Sonstiges</h2><div class="markdown">${richText(i.extra)}</div></div>` : ''}</div>
         <div>
-          ${hasPacklist ? `<div class="card"><h2>Pack-/Mitbringliste</h2><div class="packlist-text">${esc(i.packlist)}</div></div>` : ''}
+          ${hasPacklist ? `<div class="card"><h2>Pack-/Mitbringliste</h2><div class="packlist-text markdown">${richText(i.packlist)}</div></div>` : ''}
           ${i.games.length ? `<div class="card"><h2>🎮 Spiele</h2><p class="meta">Bitte vorher installieren und aktualisieren.</p><ul class="games">
             ${i.games.map((g) => `<li><strong>${esc(g.name)}</strong>${safeUrl(g.link) ? ` <a href="${esc(safeUrl(g.link))}" target="_blank" rel="noopener noreferrer">↗</a>` : ''}${g.note ? `<div class="meta markdown">${richText(g.note)}</div>` : ''}</li>`).join('')}
           </ul></div>` : ''}
@@ -157,8 +157,8 @@ adminViews.infos = {
               ${listEditor('games', i.games, [{ key: 'name', label: 'Spiel', flex: 1.2 }, { key: 'note', label: 'Hinweis (z. B. Version, Mods)', flex: 2 }, { key: 'link', label: 'Link', flex: 1.4 }])}
             </div>
             <div class="card"><h2>📜 Hausregeln</h2><label for="iRules">Regeln (Markdown)</label><textarea id="iRules" class="short">${esc(i.rules)}</textarea>${markdownHelp('iRules')}</div>
-            <div class="card"><h2>Pack-/Mitbringliste</h2><label for="iPacklist">Mitbringen (Klartext, eine Zeile pro Eintrag)</label><textarea id="iPacklist" maxlength="10000">
-${esc(i.packlist || '')}</textarea><p class="meta">Bis zu 10000 Zeichen. Leer lassen, um die Liste auszublenden. Kein Markdown und keine persönlichen Abhakstände.</p></div>
+            <div class="card"><h2>Pack-/Mitbringliste</h2><label for="iPacklist">Mitbringen (Markdown)</label><textarea id="iPacklist" maxlength="10000">
+${esc(i.packlist || '')}</textarea>${markdownHelp('iPacklist')}<p class="meta">Bis zu 10000 Zeichen. Leer lassen, um die Liste auszublenden. Keine persönlichen Abhakstände.</p></div>
           </div>
         </div>
         <p class="error" id="iError"></p>

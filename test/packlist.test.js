@@ -76,22 +76,27 @@ function frontend(info) {
   const context = vm.createContext({ views: {}, adminViews: {}, homeCards: [], beamerSlides: [],
     document: { addEventListener() {}, getElementById: (id) => elements[id], querySelectorAll: () => [], activeElement: { blur() {} } },
     api: async (method, path, body) => { calls.push({ method, path, body }); return info; },
-    adminTabs: () => '', markdownHelp: () => '', toast() {}, render() {},
+    adminTabs: () => '', toast() {}, render() {},
     esc: (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) });
-  vm.runInContext(fs.readFileSync(require.resolve('../public/info.js'), 'utf8'), context);
+  for (const file of ['vendor/marked.umd.js', 'markdown.js', 'info.js']) {
+    vm.runInContext(fs.readFileSync(require.resolve('../public/' + file), 'utf8'), context);
+  }
   return { context, elements, calls };
 }
 
-test('packlist: public plain text preserves lines, escapes HTML and has no checkboxes', async () => {
-  const info = { wifi: {}, servers: [], games: [], packlist: '- Kabel\n- [ ] Maus\n<img src=x onerror=alert(1)>' };
+test('packlist: public view uses shared Markdown formatting and escapes active content', async () => {
+  const info = { wifi: {}, servers: [], games: [], packlist: '## Mitbringen\n\n**Kabel**\nzweite Zeile\n\n- Maus\n- Tastatur\n\n[Infos](https://example.org)\n\n<img src=x onerror=alert(1)>\n<script>bad()</script>\n[x](javascript:alert%281%29)' };
   const f = frontend(info);
   await vm.runInContext('views.infos.render()', f.context);
   assert.match(f.elements.app.innerHTML, /Pack-\/Mitbringliste/);
-  assert.match(f.elements.app.innerHTML, /class="packlist-text"/);
-  assert.ok(f.elements.app.innerHTML.includes('- Kabel\n- [ ] Maus\n&lt;img'));
-  assert.doesNotMatch(f.elements.app.innerHTML, /<input|<img/);
-  const css = fs.readFileSync(require.resolve('../public/style.css'), 'utf8');
-  assert.match(css, /\.packlist-text\s*\{[^}]*white-space:\s*pre-wrap/);
+  assert.match(f.elements.app.innerHTML, /class="packlist-text markdown"/);
+  assert.match(f.elements.app.innerHTML, /<h2>Mitbringen<\/h2>/);
+  assert.match(f.elements.app.innerHTML, /<strong>Kabel<\/strong><br>/);
+  assert.match(f.elements.app.innerHTML, /<li>Maus<\/li>/);
+  assert.match(f.elements.app.innerHTML, /href="https:\/\/example.org"/);
+  assert.ok(f.elements.app.innerHTML.includes(vm.runInContext('markdown(' + JSON.stringify(info.packlist) + ')', f.context)));
+  assert.doesNotMatch(f.elements.app.innerHTML, /<(?:script|img|iframe|object|embed|input)\b/i);
+  assert.doesNotMatch(f.elements.app.innerHTML, /href\s*=\s*["']javascript:/i);
   for (const blank of ['', ' \n\t ', undefined]) {
     info.packlist = blank; await vm.runInContext('views.infos.render()', f.context);
     assert.doesNotMatch(f.elements.app.innerHTML, /Pack-\/Mitbringliste|packlist-text/);
@@ -109,6 +114,9 @@ test('packlist: admin textarea loads escaped text and submits a multiline replac
   const f = frontend(info);
   await vm.runInContext('adminViews.infos.render()', f.context);
   assert.match(f.elements.app.innerHTML, /textarea id="iPacklist"[^>]*maxlength="10000"/);
+  assert.match(f.elements.app.innerHTML, /Mitbringen \(Markdown\)/);
+  assert.match(f.elements.app.innerHTML, /data-markdown-for="iPacklist"/);
+  assert.doesNotMatch(f.elements.app.innerHTML, /Kein Markdown|Klartext, eine Zeile/);
   assert.ok(f.elements.app.innerHTML.includes('Kabel\n&lt;/textarea&gt;&lt;script&gt;'));
   assert.equal(f.elements.iPacklist.value, info.packlist);
   assert.doesNotMatch(f.elements.app.innerHTML, /<(?:script|iframe|object|embed|img)\b|type\s*=\s*["']checkbox\b/i);
