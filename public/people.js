@@ -206,10 +206,97 @@ adminViews.teilnehmer = {
 };
 
 // ---------- Admin: Personen (alle Events) ----------
-const PersonsAdmin = { q: '' };
+const PersonsAdmin = { q: '', account: null, accountRequest: 0 };
+const PERSON_ACCOUNT_FIELDS = [
+  ['firstName', 'Vorname'], ['lastName', 'Nachname'], ['street', 'Straße und Hausnummer'],
+  ['zip', 'PLZ'], ['city', 'Ort'], ['email', 'E-Mail', 'email'], ['birthdate', 'Geburtsdatum', 'date'],
+];
+const personAccountKey = (t) => `${t.kind}:${t.id}`;
+const personAccountLabel = (t) => t.kind === 'order' ? `Abendkasse · ${t.ref} · ${t.eventName}`
+  : `${t.relationship === 'own' ? 'Eigenes Ticketkonto' : 'Käuferkonto'} · ${t.name || t.id}`;
+function snapshotPersonAccountDraft() {
+  const a = PersonsAdmin.account, form = document.getElementById('personAccountForm');
+  if (a && form?.accountState === a && form.accountTarget === a.selected) {
+    a.draft = Object.fromEntries(PERSON_ACCOUNT_FIELDS.map(([k]) => [k, document.getElementById('pa_' + k).value]));
+  }
+}
+function personAccountForm() {
+  const a = PersonsAdmin.account;
+  if (!a) return '';
+  const t = a.data.targets.find((x) => personAccountKey(x) === a.selected);
+  if (t && !a.draft) a.draft = { ...t.profile };
+  return `<div class="card editor"><h2>Ticketkonto: ${esc(a.data.person.name)}</h2>
+    ${!t ? '<p>Keine zugeordneten Ticketkonten oder Abendkassenbestellungen gefunden.</p><button id="pa_close">Schließen</button>' : `
+    <form id="personAccountForm">
+      <label>Zuordnung<select id="pa_target">${a.data.targets.map((x) => `<option value="${esc(personAccountKey(x))}" ${x === t ? 'selected' : ''}>${esc(personAccountLabel(x))}</option>`).join('')}</select></label>
+      <p class="meta">${t.kind === 'order' ? `Kontaktdaten nur für diese Abendkassenbestellung (${esc(t.ref)}, ${esc(t.eventName)}).`
+        : t.relationship === 'buyer' ? 'Achtung: Diese Daten gehören dem Käufer, nicht zwingend der ausgewählten Person. Änderungen betreffen dessen gesamtes Ticketkonto.'
+          : 'Kontaktdaten dieses Ticketkontos gelten eventübergreifend.'}</p>
+      <p class="meta">Nur auf Wunsch des Kontoinhabers ändern. Discord-Verknüpfung, Einwilligung, Ticketnamen, Preise und Zahlungsstatus bleiben unverändert.</p>
+      ${PERSON_ACCOUNT_FIELDS.map(([k, label, type]) => `<label>${label}<input id="pa_${k}" type="${type || 'text'}" value="${esc(a.draft[k] || '')}" required></label>`).join('')}
+      <p id="pa_error" class="error" role="alert"></p>
+      <div class="row"><button type="submit" class="primary">Kontaktdaten speichern</button><button type="button" id="pa_reload">Neu laden</button><button type="button" id="pa_close">Schließen</button></div>
+    </form>`}</div>`;
+}
+async function openPersonAccount(id) {
+  if (PersonsAdmin.account?.busy) return;
+  if (PersonsAdmin.account && !confirm('Ticketkonto öffnen und ungespeicherte Änderungen verwerfen?')) return;
+  const request = ++PersonsAdmin.accountRequest;
+  try {
+    const data = await api('GET', `/persons/${encodeURIComponent(id)}/ticket-accounts`);
+    if (request !== PersonsAdmin.accountRequest) return;
+    PersonsAdmin.account = { data, selected: data.targets.length ? personAccountKey(data.targets[0]) : null, draft: null, busy: false, committed: false, error: '' };
+    await render();
+  } catch (err) { toast(err.message); }
+}
+function bindPersonAccount(app) {
+  const a = PersonsAdmin.account;
+  if (!a) return;
+  document.getElementById('pa_close').onclick = () => {
+    if (a.busy || !confirm('Ticketkonto schließen und ungespeicherte Änderungen verwerfen?')) return;
+    PersonsAdmin.account = null; PersonsAdmin.accountRequest++; return render();
+  };
+  const form = document.getElementById('personAccountForm');
+  if (!form) return;
+  form.accountState = a; form.accountTarget = a.selected;
+  const sync = () => {
+    const current = document.getElementById('personAccountForm');
+    if (current?.accountState !== a) return;
+    current.querySelectorAll('input, select, button').forEach((el) => { el.disabled = a.busy || a.committed; });
+    document.getElementById('pa_error').textContent = a.error;
+  };
+  sync();
+  document.getElementById('pa_target').onchange = () => {
+    if (a.busy || a.committed) { document.getElementById('pa_target').value = a.selected; return; }
+    if (!confirm('Zuordnung wechseln und ungespeicherte Änderungen verwerfen?')) {
+      document.getElementById('pa_target').value = a.selected; return;
+    }
+    a.selected = document.getElementById('pa_target').value; a.draft = null; a.error = ''; return render();
+  };
+  document.getElementById('pa_reload').onclick = () => {
+    if (a.busy || a.committed) return;
+    return openPersonAccount(a.data.person.id);
+  };
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    if (a.busy || a.committed || PersonsAdmin.account !== a || document.getElementById('personAccountForm') !== form) return;
+    const t = a.data.targets.find((x) => personAccountKey(x) === a.selected);
+    if (!t) return;
+    snapshotPersonAccountDraft();
+    const profile = { ...a.draft };
+    a.busy = true; a.error = ''; PersonsAdmin.accountRequest++; sync();
+    try {
+      await api('PUT', `/persons/${encodeURIComponent(a.data.person.id)}/ticket-accounts/${t.kind}/${encodeURIComponent(t.id)}`, { profile, version: t.version });
+      a.committed = true;
+      PersonsAdmin.account = null; PersonsAdmin.accountRequest++;
+      toast('Kontaktdaten gespeichert'); await render();
+    } catch (err) { a.error = err.message; }
+    finally { a.busy = false; sync(); }
+  };
+}
 
 adminViews.personen = {
-  label: 'Personen', module: 'people', order: 32, events: ['people', 'tickets'],
+  label: 'Personen', module: 'people', order: 32, events: ['people', 'tickets', 'accounts'], preserveDraft: true,
   async render() {
     const persons = (await api('GET', '/persons')).sort((a, b) => b.events.length - a.events.length || a.name.localeCompare(b.name, 'de'));
     const q = PersonsAdmin.q.toLowerCase();
@@ -217,7 +304,10 @@ adminViews.personen = {
     const eventCount = (state.events || { events: [] }).events.length;
     const regulars = persons.filter((p) => p.events.length >= 2).length;
     const app = document.getElementById('app');
+    if (PersonsAdmin.account && !PersonsAdmin.account.busy && !persons.some((p) => p.id === PersonsAdmin.account.data.person.id)) PersonsAdmin.account = null;
+    snapshotPersonAccountDraft();
     app.innerHTML = `${adminTabs('personen')}
+      ${personAccountForm()}
       <div class="stats">
         <div class="stat"><span>${persons.length}</span>Personen</div>
         <div class="stat"><span>${regulars}</span>mehr als einmal dabei</div>
@@ -237,12 +327,16 @@ adminViews.personen = {
           <td class="nowrap">${p.discordName ? `💬 ${esc(p.discordName)}${p.account ? ' <span class="meta" title="Hat ein Ticket-Konto mit hinterlegten Daten">🎟️</span>' : ''} <button class="small" data-unlink title="Verknüpfung lösen">✕</button>` : '<span class="meta">–</span>'}</td>
           <td><input data-k="steam" value="${esc(p.steam)}" placeholder="Steam"></td>
           <td><input data-k="note" value="${esc(p.note)}" placeholder="Notiz"></td>
-          <td><div class="row"><select data-merge title="Mit einer anderen Person zusammenführen"><option value="">Zusammenführen mit …</option>
+          <td><div class="row"><button type="button" class="small" data-ticket-account="${esc(p.id)}">🎟️ Ticketkonto</button><select data-merge title="Mit einer anderen Person zusammenführen"><option value="">Zusammenführen mit …</option>
             ${persons.filter((x) => x !== p).map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select>
             <button class="small danger" data-pdel title="Person überall löschen">🗑</button></div></td>
         </tr>`).join('')}</tbody></table></div>` : '<p class="meta">Keine Personen gefunden.</p>'}
       </div>`;
 
+    bindPersonAccount(app);
+    app.querySelectorAll('[data-ticket-account]').forEach((button) => {
+      button.onclick = () => openPersonAccount(button.dataset.ticketAccount);
+    });
     document.getElementById('psSearch').onchange = (e) => { PersonsAdmin.q = e.target.value; render(); };
     app.querySelectorAll('tr[data-pid]').forEach((tr) => {
       const p = persons.find((x) => x.id === tr.dataset.pid);
