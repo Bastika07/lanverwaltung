@@ -145,6 +145,8 @@ Ablauf für den Admin:
 1. Sobald das Geld da ist, die Bestellung auf „Bezahlt“ setzen.
 2. Beim Einlass den QR-Code scannen (siehe unten).
 
+**Abendkasse:** Unter **Admin → Tickets** kann die Orga Tickets ohne Discord-Konto buchen, Name und Anschrift erfassen und die Kontaktdaten manueller Bestellungen später korrigieren. Die Zahlung ist wählbar: offen oder bar bezahlt. Anleitung und Datenschutzgrenzen: [docs/box-office.md](docs/box-office.md).
+
 **Sitzplätze:**
 - **Plan zeichnen** (Admin → Sitzplan, Raster bis 80 × 60):
   - „▦ Platz-Block“ füllt mit zwei Klicks (zwei Ecken) ein ganzes Rechteck mit fortlaufend nummerierten Plätzen, z. B. eine Tischreihe.

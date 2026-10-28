@@ -316,8 +316,80 @@ function bindTicketPage(a, sellable, ev) {
 // ---------- Admin ----------
 const TixAdmin = { filter: 'pending', q: '', editType: null, checkin: '' }; // checkin: letzte Meldung (übersteht Neuzeichnen)
 
+const BOX_FIELDS = ['firstName', 'lastName', 'street', 'zip', 'city', 'email', 'birthdate'];
+const BoxOffice = { edit: null, holders: null }; // IDs only; personal drafts remain in the form.
+function boxOfficeForm(d) {
+  const types = d.types.filter((t) => t.active);
+  const editing = d.orders.find((o) => o.id === BoxOffice.edit && o.source === 'box_office');
+  const profile = editing ? editing.buyer.profile : {};
+  const holders = d.orders.find((o) => o.id === BoxOffice.holders && o.status !== 'cancelled');
+  const labels = ['Vorname', 'Nachname', 'Straße und Hausnummer', 'PLZ', 'Ort', 'E-Mail', 'Geburtsdatum'];
+  return `<div class="card"><h2>${editing ? `Kontaktdaten bearbeiten: ${esc(editing.ref)}` : 'Abendkasse – ohne Discord'}</h2><form id="boxOfficeForm">
+    <h3>Käufer / Kontakt</h3>
+    ${BOX_FIELDS.map((k, i) => `<div class="field"><label for="bo_${k}">${labels[i]}</label><input id="bo_${k}" value="${esc(profile[k] || '')}" required maxlength="${[60, 60, 120, 10, 80, 120, 10][i]}" ${k === 'email' ? 'type="email"' : k === 'birthdate' ? 'type="date"' : k === 'zip' ? 'inputmode="numeric"' : ''}></div>`).join('')}
+    ${editing ? '<p class="meta">Nur Kontaktdaten: Ticketnamen, Codes, Zahlung und Check-in bleiben unverändert.</p>' : `
+    <div class="field"><label for="bo_type">Ticketart</label><select id="bo_type" required>${types.map((t) => `<option value="${esc(t.id)}">${esc(t.name)} · ${euro(t.price)} · ${t.quota == null ? 'unbegrenzt verfügbar' : `noch ${Math.max(0, t.quota - t.sold)} verfügbar`}</option>`).join('')}</select></div>
+    <div class="field"><label for="bo_holder">Ticketinhaber – Name / Nickname (leer = voller Käufername)</label><input id="bo_holder" maxlength="60"></div>
+    <div class="field"><label for="bo_paid">Zahlung</label><select id="bo_paid"><option value="pending">Offen – noch nicht bezahlt</option><option value="paid">Bar bezahlt</option></select></div>
+    <div class="privacy markdown">${markdown(d.settings.privacy)}</div>${websiteLegalLinks(['datenschutz'])}
+    <label class="check field"><input type="checkbox" id="bo_privacy" required> Der Datenschutzhinweis wurde der Person bereitgestellt.</label>
+    <p id="bo_summary"></p>`}<p class="error" id="bo_error"></p>
+    <button class="primary" type="submit" ${editing || types.length ? '' : 'disabled'}>${editing ? 'Kontaktdaten speichern' : 'Ticket anlegen'}</button>
+    ${editing ? '<button type="button" id="bo_cancel">Abbrechen</button>' : ''}
+  </form>
+  ${holders ? `<form id="boHoldersForm"><h3>Ticketnamen: ${esc(holders.ref)}</h3><p class="meta">Kontaktdaten bleiben unverändert.</p>
+    ${holders.tickets.map((t) => `<div class="field"><label for="bo_ticket_${esc(t.id)}">${esc(t.typeName || 'Ticket')} – Name / Nickname</label><input id="bo_ticket_${esc(t.id)}" value="${esc(t.holder)}" maxlength="60" required></div>`).join('')}
+    <p class="error" id="bo_holders_error"></p><button class="primary" type="submit">Ticketnamen speichern</button><button type="button" id="bo_holders_cancel">Abbrechen</button></form>` : ''}</div>`;
+}
+// Unlock only failed writes; committed forms stay locked even if refresh fails.
+function bindBoxSave(form, error, request, done) {
+  let saving = false;
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    if (saving) return;
+    saving = true;
+    const controls = [...form.querySelectorAll('input, select, button')].map((c) => [c, c.disabled]);
+    controls.forEach(([c]) => { c.disabled = true; });
+    error.textContent = '';
+    let committed = false;
+    try { const result = await request(); committed = true; await done(result); }
+    catch (err) { error.textContent = err.message; }
+    finally { if (!committed) { controls.forEach(([c, disabled]) => { c.disabled = disabled; }); saving = false; } }
+  };
+}
+function bindBoxOffice(d) {
+  const $ = (id) => document.getElementById(id);
+  const editing = d.orders.find((o) => o.id === BoxOffice.edit && o.source === 'box_office');
+  const summary = () => {
+    const t = d.types.find((x) => x.id === $('bo_type').value);
+    $('bo_summary').textContent = t ? `1 × ${t.name} · Summe: ${euro(t.price)} · ${$('bo_paid').value === 'paid' ? 'Bar bezahlt' : 'Offen'}` : 'Keine aktive Ticketart verfügbar.';
+  };
+  if (!editing) { $('bo_type').onchange = $('bo_paid').onchange = summary; summary(); }
+  if ($('bo_cancel')) $('bo_cancel').onclick = () => { BoxOffice.edit = null; render(); };
+  bindBoxSave($('boxOfficeForm'), $('bo_error'), async () => {
+    const buyerProfile = Object.fromEntries(BOX_FIELDS.map((k) => [k, $('bo_' + k).value]));
+    if (editing) return api('PUT', `/tickets/orders/${encodeURIComponent(editing.id)}/buyer`, { buyerProfile, version: editing.version });
+    if (!$('bo_privacy').checked) throw new Error('Bitte die Bereitstellung des Datenschutzhinweises bestätigen.');
+    return api('POST', '/tickets/admin/orders', { buyerProfile, items: [{ typeId: $('bo_type').value, holder: $('bo_holder').value.trim() || `${buyerProfile.firstName} ${buyerProfile.lastName}`.trim() }], paid: $('bo_paid').value === 'paid', privacyConfirmed: true });
+  }, (o) => {
+      BoxOffice.edit = null;
+      TixAdmin.filter = o.status; TixAdmin.q = '';
+      toast(`${editing ? 'Kontaktdaten gespeichert' : 'Ticket angelegt'}: ${o.ref}`); return render();
+  });
+  document.querySelectorAll('[data-bo-edit]').forEach((b) => { b.onclick = () => { BoxOffice.edit = b.dataset.boEdit; BoxOffice.holders = null; render(); }; });
+  document.querySelectorAll('[data-oprint]').forEach((b) => { b.onclick = () => { const o = d.orders.find((x) => x.id === b.dataset.oprint && x.status === 'paid'); if (o) printTickets(o); }; });
+  document.querySelectorAll('[data-bo-holders]').forEach((b) => { b.onclick = () => { BoxOffice.holders = b.dataset.boHolders; BoxOffice.edit = null; render(); }; });
+  const holders = d.orders.find((o) => o.id === BoxOffice.holders && o.status !== 'cancelled');
+  if (holders) {
+    $('bo_holders_cancel').onclick = () => { BoxOffice.holders = null; render(); };
+    bindBoxSave($('boHoldersForm'), $('bo_holders_error'), () => api('PUT', `/tickets/orders/${encodeURIComponent(holders.id)}/holders`, {
+      holders: Object.fromEntries(holders.tickets.map((t) => [t.id, $('bo_ticket_' + t.id).value])),
+    }), () => { BoxOffice.holders = null; toast('Ticketnamen gespeichert'); return render(); });
+  }
+}
+
 adminViews.tickets = {
-  label: 'Tickets', module: 'tickets', order: 45, events: ['tickets', 'accounts'],
+  label: 'Tickets', module: 'tickets', order: 45, events: ['tickets', 'accounts'], preserveDraft: true,
   async render() {
     const [d, acc, ppl] = await Promise.all([api('GET', '/tickets/admin'), api('GET', '/accounts'), api('GET', '/people').catch(() => null)]);
     d.seatCategories = ppl ? ppl.seating.categories || [] : [];
@@ -339,6 +411,7 @@ adminViews.tickets = {
         <div class="stat"><span>${d.stats.checkedIn}</span>eingecheckt</div>
       </div>
 
+      ${boxOfficeForm(d)}
       <div class="card"><div class="row" style="justify-content:space-between">
         <h2>Bestellungen <span class="meta">${esc(d.event.name)}</span></h2>
         <div class="row"><a class="btn small" href="/api/tickets/export.csv?event=${encodeURIComponent(d.event.id)}">⬇ CSV-Export</a></div></div>
@@ -352,13 +425,16 @@ adminViews.tickets = {
           const overdue = o.status === 'pending' && Date.parse(o.dueAt) < Date.now();
           return `<tr class="${o.status}">
             <td><strong>${esc(o.ref)}</strong> ${statusBadge2(o.status)}${overdue ? ' <span class="badge overdue">überfällig</span>' : ''}
-              <div class="meta">${dateDe(o.createdAt)}${o.status === 'pending' ? ` · fällig ${dateDe(o.dueAt)}` : ''}${o.paidAt ? ` · bezahlt ${dateDe(o.paidAt)}` : ''}</div></td>
+              <div class="meta">${dateDe(o.createdAt)}${o.source === 'box_office' ? ' · Abendkasse' : ''}${o.status === 'paid' && o.paymentMethod === 'cash' ? ' · bar bezahlt' : ''}${o.status === 'pending' ? ` · fällig ${dateDe(o.dueAt)}` : ''}${o.paidAt ? ` · bezahlt ${dateDe(o.paidAt)}` : ''}</div></td>
             <td>${esc(o.buyer.name)}${p ? `<details><summary class="meta">${esc(p.firstName)} ${esc(p.lastName)}</summary>
               <div class="meta">${esc(p.street)}, ${esc(p.zip)} ${esc(p.city)}<br>${esc(p.email)} · ${dateDe(p.birthdate)} (${o.buyer.age} J.)</div></details>` : ''}</td>
             <td>${o.tickets.map((t) => `<div>${esc(t.holder)} <span class="meta">· ${esc(t.typeName)} · <code>${esc(t.code)}</code>${t.checkedInAt ? ' ✅' : ''}</span></div>`).join('')}</td>
             <td class="nowrap"><strong>${euro(o.total)}</strong></td>
             <td><div class="row">
               ${o.status === 'pending' ? `<button class="small primary" data-paid="${o.id}">✓ Bezahlt</button>` : ''}
+              ${o.source === 'box_office' ? `<button class="small" data-bo-edit="${esc(o.id)}">Daten bearbeiten</button>` : ''}
+              ${o.status !== 'cancelled' ? `<button class="small" data-bo-holders="${esc(o.id)}">Ticketnamen</button>` : ''}
+              ${o.status === 'paid' ? `<button class="small" data-oprint="${esc(o.id)}">Tickets drucken</button>` : ''}
               ${o.status === 'paid' ? `<button class="small" data-unpaid="${o.id}" title="Zahlung zurücknehmen">↩</button>` : ''}
               ${o.status !== 'cancelled' ? `<button class="small danger" data-ocancel="${o.id}">Storno</button>` : ''}
             </div></td></tr>`;
@@ -400,7 +476,7 @@ adminViews.tickets = {
 
         <div>
           <div class="card"><h2>🎫 Check-in</h2>
-            <form id="checkinForm" class="row"><input id="ciCode" placeholder="Ticket-Code, z. B. 4F6YQVK5" maxlength="8" style="max-width:220px;text-transform:uppercase">
+            <form id="checkinForm" class="row"><input id="ciCode" placeholder="Ticket-Code (32 Zeichen)" maxlength="32" style="max-width:340px;text-transform:uppercase">
               <button class="primary" type="submit">Einchecken</button></form>
             <p id="ciResult" class="meta">${TixAdmin.checkin}</p>
           </div>
@@ -437,6 +513,7 @@ adminViews.tickets = {
         </div>
       </div>`;
     bindTicketAdmin(et);
+    bindBoxOffice(d);
   },
 };
 
