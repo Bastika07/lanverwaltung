@@ -1,5 +1,5 @@
 'use strict';
-/* global api, esc, toast, state, on, views, adminViews, adminTabs, startHooks, liveHandlers, render, copyBtn, toLocalInput, QR, renderLogin, seatMap, seatLegend, loadMe, websiteLegalLinks, markdown, markdownHelp */
+/* global api, esc, toast, state, on, views, adminViews, adminTabs, startHooks, liveHandlers, render, scopeEventId, copyBtn, toLocalInput, QR, renderLogin, seatMap, seatLegend, loadMe, websiteLegalLinks, markdown, markdownHelp */
 // Tickets: Anmeldung mit Discord, eigene Daten, Bestellung mit Namen pro Ticket,
 // Überweisungsdaten, eigene Tickets – und die Verwaltung im Admin-Bereich.
 // Gibt es Tickets für mehrere Events (Vorverkauf fürs nächste), wählt der Besucher das Event (state.ticketEvent).
@@ -317,19 +317,36 @@ function bindTicketPage(a, sellable, ev) {
 const TixAdmin = { filter: 'pending', q: '', editType: null, checkin: '' }; // checkin: letzte Meldung (übersteht Neuzeichnen)
 
 const BOX_FIELDS = ['firstName', 'lastName', 'street', 'zip', 'city', 'email', 'birthdate'];
-const BoxOffice = { edit: null, holders: null }; // IDs only; personal drafts remain in the form.
+const BoxOffice = { edit: null, holders: null, bookings: new Map() }; // In-memory drafts, scoped by event.
+function snapshotBoxBooking() {
+  const form = document.getElementById('boxOfficeForm'), b = form?.booking;
+  if (!b || b.committed) return;
+  for (const id of [...BOX_FIELDS.map((k) => 'bo_' + k), 'bo_type', 'bo_person', 'bo_holder', 'bo_paid']) {
+    b.values[id] = document.getElementById(id).value;
+  }
+  b.privacy = document.getElementById('bo_privacy').checked;
+}
+function boxBooking(eventId) {
+  if (!BoxOffice.bookings.has(eventId)) BoxOffice.bookings.set(eventId, { values: {}, privacy: false, saving: false, committed: false, error: '' });
+  return BoxOffice.bookings.get(eventId);
+}
 function boxOfficeForm(d) {
   const types = d.types.filter((t) => t.active);
   const editing = d.orders.find((o) => o.id === BoxOffice.edit && o.source === 'box_office');
   const profile = editing ? editing.buyer.profile : {};
   const holders = d.orders.find((o) => o.id === BoxOffice.holders && o.status !== 'cancelled');
   const labels = ['Vorname', 'Nachname', 'Straße und Hausnummer', 'PLZ', 'Ort', 'E-Mail', 'Geburtsdatum'];
+  const candidates = [...(d.persons || [])];
+  const previousPerson = boxBooking(d.event.id).values.bo_person;
+  if (previousPerson && !candidates.some((p) => p.id === previousPerson)) candidates.push({ id: previousPerson, name: 'Ausgewählte Person nicht mehr verfügbar' });
   return `<div class="card"><h2>${editing ? `Kontaktdaten bearbeiten: ${esc(editing.ref)}` : 'Abendkasse – ohne Discord'}</h2><form id="boxOfficeForm">
     <h3>Käufer / Kontakt</h3>
     ${BOX_FIELDS.map((k, i) => `<div class="field"><label for="bo_${k}">${labels[i]}</label><input id="bo_${k}" value="${esc(profile[k] || '')}" required maxlength="${[60, 60, 120, 10, 80, 120, 10][i]}" ${k === 'email' ? 'type="email"' : k === 'birthdate' ? 'type="date"' : k === 'zip' ? 'inputmode="numeric"' : ''}></div>`).join('')}
     ${editing ? '<p class="meta">Nur Kontaktdaten: Ticketnamen, Codes, Zahlung und Check-in bleiben unverändert.</p>' : `
     <div class="field"><label for="bo_type">Ticketart</label><select id="bo_type" required>${types.map((t) => `<option value="${esc(t.id)}">${esc(t.name)} · ${euro(t.price)} · ${t.quota == null ? 'unbegrenzt verfügbar' : `noch ${Math.max(0, t.quota - t.sold)} verfügbar`}</option>`).join('')}</select></div>
-    <div class="field"><label for="bo_holder">Ticketinhaber – Name / Nickname (leer = voller Käufername)</label><input id="bo_holder" maxlength="60"></div>
+    <div class="field"><label for="bo_person">Ticketinhaber – Person auswählen</label><select id="bo_person"><option value="">Neue Person anlegen</option>${candidates.sort((a, b) => a.name.localeCompare(b.name, 'de')).map((p) => `<option value="${esc(p.id)}">${esc(p.name)}${p.discordName ? ` · ${esc(p.discordName)}` : ''}</option>`).join('')}</select></div>
+    <p class="meta">Eine bestehende Person wird über ihre Personen-ID verknüpft, ohne einen doppelten Eintrag anzulegen. Käufer-Kontaktdaten bleiben davon getrennt.</p>
+    <div class="field"><label for="bo_holder">Neue Person – Anzeigename (optional; sonst voller Käufername)</label><input id="bo_holder" maxlength="60"></div>
     <div class="field"><label for="bo_paid">Zahlung</label><select id="bo_paid"><option value="pending">Offen – noch nicht bezahlt</option><option value="paid">Bar bezahlt</option></select></div>
     <div class="privacy markdown">${markdown(d.settings.privacy)}</div>${websiteLegalLinks(['datenschutz'])}
     <label class="check field"><input type="checkbox" id="bo_privacy" required> Der Datenschutzhinweis wurde der Person bereitgestellt.</label>
@@ -342,55 +359,87 @@ function boxOfficeForm(d) {
     <p class="error" id="bo_holders_error"></p><button class="primary" type="submit">Ticketnamen speichern</button><button type="button" id="bo_holders_cancel">Abbrechen</button></form>` : ''}</div>`;
 }
 // Unlock only failed writes; committed forms stay locked even if refresh fails.
-function bindBoxSave(form, error, request, done) {
-  let saving = false;
+function bindBoxSave(form, error, request, done, status = { saving: false, committed: false, error: '' }) {
+  const controls = [...form.querySelectorAll('input, select, button')].map((c) => [c, c.disabled]);
+  const sync = () => {
+    controls.forEach(([c, disabled]) => { c.disabled = status.saving || status.committed || (c.id === 'bo_holder' && form.booking ? !!form.booking.values.bo_person : disabled); });
+    error.textContent = status.error;
+  };
+  status.sync = sync; sync();
   form.onsubmit = async (e) => {
     e.preventDefault();
-    if (saving) return;
-    saving = true;
-    const controls = [...form.querySelectorAll('input, select, button')].map((c) => [c, c.disabled]);
-    controls.forEach(([c]) => { c.disabled = true; });
-    error.textContent = '';
-    let committed = false;
-    try { const result = await request(); committed = true; await done(result); }
-    catch (err) { error.textContent = err.message; }
-    finally { if (!committed) { controls.forEach(([c, disabled]) => { c.disabled = disabled; }); saving = false; } }
+    if (status.saving || status.committed || document.getElementById(form.id) !== form) return;
+    snapshotBoxBooking();
+    status.saving = true; status.error = ''; sync();
+    try { const result = await request(); status.committed = true; await done(result); }
+    catch (err) { status.error = err.message; }
+    finally { status.saving = false; status.sync(); }
   };
 }
 function bindBoxOffice(d) {
   const $ = (id) => document.getElementById(id);
+  const requireCurrentEvent = () => {
+    // api() uses the live event scope, which can change before this form is replaced.
+    if (scopeEventId() !== d.event.id) throw new Error('Die ausgewählte Veranstaltung wurde geändert. Bitte neu laden.');
+  };
   const editing = d.orders.find((o) => o.id === BoxOffice.edit && o.source === 'box_office');
+  const booking = editing ? null : boxBooking(d.event.id);
+  if (booking) {
+    $('boxOfficeForm').booking = booking;
+    for (const [id, value] of Object.entries(booking.values)) if ($(id)) $(id).value = value;
+    $('bo_privacy').checked = booking.privacy;
+    const person = (d.persons || []).find((p) => p.id === $('bo_person').value);
+    if ($('bo_person').value) { $('bo_holder').value = person ? person.name : 'Person nicht mehr verfügbar'; $('bo_holder').disabled = true; }
+  }
   const summary = () => {
     const t = d.types.find((x) => x.id === $('bo_type').value);
     $('bo_summary').textContent = t ? `1 × ${t.name} · Summe: ${euro(t.price)} · ${$('bo_paid').value === 'paid' ? 'Bar bezahlt' : 'Offen'}` : 'Keine aktive Ticketart verfügbar.';
   };
-  if (!editing) { $('bo_type').onchange = $('bo_paid').onchange = summary; summary(); }
+  if (!editing) {
+    $('bo_type').onchange = $('bo_paid').onchange = summary; summary();
+    $('bo_person').onchange = () => {
+      if (booking.saving || booking.committed) { $('bo_person').value = booking.values.bo_person || ''; return; }
+      const p = (d.persons || []).find((p) => p.id === $('bo_person').value);
+      booking.values.bo_person = $('bo_person').value;
+      $('bo_holder').disabled = !!$('bo_person').value;
+      $('bo_holder').value = p ? p.name : '';
+    };
+  }
   if ($('bo_cancel')) $('bo_cancel').onclick = () => { BoxOffice.edit = null; render(); };
   bindBoxSave($('boxOfficeForm'), $('bo_error'), async () => {
+    requireCurrentEvent();
     const buyerProfile = Object.fromEntries(BOX_FIELDS.map((k) => [k, $('bo_' + k).value]));
     if (editing) return api('PUT', `/tickets/orders/${encodeURIComponent(editing.id)}/buyer`, { buyerProfile, version: editing.version });
     if (!$('bo_privacy').checked) throw new Error('Bitte die Bereitstellung des Datenschutzhinweises bestätigen.');
-    return api('POST', '/tickets/admin/orders', { buyerProfile, items: [{ typeId: $('bo_type').value, holder: $('bo_holder').value.trim() || `${buyerProfile.firstName} ${buyerProfile.lastName}`.trim() }], paid: $('bo_paid').value === 'paid', privacyConfirmed: true });
+    const personId = $('bo_person').value;
+    if (personId && !(d.persons || []).some((p) => p.id === personId)) throw new Error('Die ausgewählte Person ist nicht mehr verfügbar. Bitte neu laden.');
+    const item = { typeId: $('bo_type').value, ...(personId ? { personId } : { holder: $('bo_holder').value.trim() || `${buyerProfile.firstName} ${buyerProfile.lastName}`.trim() }) };
+    return api('POST', '/tickets/admin/orders', { buyerProfile, items: [item], paid: $('bo_paid').value === 'paid', privacyConfirmed: true });
   }, (o) => {
       BoxOffice.edit = null;
       TixAdmin.filter = o.status; TixAdmin.q = '';
+      if (booking && BoxOffice.bookings.get(d.event.id) === booking) BoxOffice.bookings.delete(d.event.id);
       toast(`${editing ? 'Kontaktdaten gespeichert' : 'Ticket angelegt'}: ${o.ref}`); return render();
-  });
+  }, booking || undefined);
   document.querySelectorAll('[data-bo-edit]').forEach((b) => { b.onclick = () => { BoxOffice.edit = b.dataset.boEdit; BoxOffice.holders = null; render(); }; });
   document.querySelectorAll('[data-oprint]').forEach((b) => { b.onclick = () => { const o = d.orders.find((x) => x.id === b.dataset.oprint && x.status === 'paid'); if (o) printTickets(o); }; });
   document.querySelectorAll('[data-bo-holders]').forEach((b) => { b.onclick = () => { BoxOffice.holders = b.dataset.boHolders; BoxOffice.edit = null; render(); }; });
   const holders = d.orders.find((o) => o.id === BoxOffice.holders && o.status !== 'cancelled');
   if (holders) {
     $('bo_holders_cancel').onclick = () => { BoxOffice.holders = null; render(); };
-    bindBoxSave($('boHoldersForm'), $('bo_holders_error'), () => api('PUT', `/tickets/orders/${encodeURIComponent(holders.id)}/holders`, {
-      holders: Object.fromEntries(holders.tickets.map((t) => [t.id, $('bo_ticket_' + t.id).value])),
-    }), () => { BoxOffice.holders = null; toast('Ticketnamen gespeichert'); return render(); });
+    bindBoxSave($('boHoldersForm'), $('bo_holders_error'), () => {
+      requireCurrentEvent();
+      return api('PUT', `/tickets/orders/${encodeURIComponent(holders.id)}/holders`, {
+        holders: Object.fromEntries(holders.tickets.map((t) => [t.id, $('bo_ticket_' + t.id).value])),
+      });
+    }, () => { BoxOffice.holders = null; toast('Ticketnamen gespeichert'); return render(); });
   }
 }
 
 adminViews.tickets = {
   label: 'Tickets', module: 'tickets', order: 45, events: ['tickets', 'accounts'], preserveDraft: true,
   async render() {
+    snapshotBoxBooking();
     const [d, acc, ppl] = await Promise.all([api('GET', '/tickets/admin'), api('GET', '/accounts'), api('GET', '/people').catch(() => null)]);
     d.seatCategories = ppl ? ppl.seating.categories || [] : [];
     const s = d.settings;
@@ -402,6 +451,7 @@ adminViews.tickets = {
     const count = (st) => d.orders.filter((o) => o.status === st).length;
     const app = document.getElementById('app');
 
+    snapshotBoxBooking();
     app.innerHTML = `${adminTabs('tickets')}
       <div class="stats">
         <div class="stat"><span>${d.stats.paidTickets}</span>bezahlte Tickets</div>

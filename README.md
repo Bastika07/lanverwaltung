@@ -35,7 +35,7 @@ Das System verwaltet mehrere LAN-Events (z. B. „Seniorenlan #12“, „#13“)
 - **Vorverkauf:** Hat ein kommendes Event Ticketarten, wählen Käufer auf der Ticketseite das Event aus. Das geht auch, während ein anderes läuft.
 - **Archiv:** Vergangene Events bleiben mit allem erhalten. Löschen lässt sich nur ein Event ohne Bestellungen und Catering-Anmeldungen.
 
-**Personen und Statistik:** Personen bleiben über alle Events erhalten. Im Reiter **Teilnehmer** übernimmt die Orga bekannte Personen ins Event. Ticketnamen sind keine Identitätsnachweise: Neue Tickets erhalten eigene Personen, Namensgleichheit führt nicht automatisch zur Zusammenführung. Der Reiter **Personen** zeigt Events und Check-ins. Zusammenführen ist nur bei kompatiblen Ticket-Eigentümern und Discord-Verknüpfungen möglich.
+**Personen und Statistik:** Personen bleiben über alle Events erhalten. Im Reiter **Teilnehmer** übernimmt die Orga bekannte Personen ins Event. Ticketnamen sind keine Identitätsnachweise: Neue Tickets erhalten eigene Personen, sofern die Orga bei der Abendkasse nicht ausdrücklich eine bestehende Person auswählt. Namensgleichheit führt nicht automatisch zur Zusammenführung. Der Reiter **Personen** zeigt Events und Check-ins. Zusammenführen ist nur bei kompatiblen Ticket-Eigentümern und Discord-Verknüpfungen möglich.
 
 **Ticketkonto bearbeiten:** Von **Admin → Personen** aus kann die Orga zugeordnete Ticket-Kontaktdaten auf Wunsch korrigieren. Eigenes Konto, abweichendes Käuferkonto und Abendkassenbestellung werden unterschieden. Anleitung: [docs/person-ticket-account.md](docs/person-ticket-account.md).
 
