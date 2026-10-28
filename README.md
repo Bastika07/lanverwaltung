@@ -37,6 +37,8 @@ Das System verwaltet mehrere LAN-Events (z. B. „Seniorenlan #12“, „#13“)
 
 **Personen und Statistik:** Personen bleiben über alle Events erhalten. Im Reiter **Teilnehmer** übernimmt die Orga bekannte Personen ins Event. Ticketnamen sind keine Identitätsnachweise: Neue Tickets erhalten eigene Personen, Namensgleichheit führt nicht automatisch zur Zusammenführung. Der Reiter **Personen** zeigt Events und Check-ins. Zusammenführen ist nur bei kompatiblen Ticket-Eigentümern und Discord-Verknüpfungen möglich.
 
+**Ticketkonto bearbeiten:** Von **Admin → Personen** aus kann die Orga zugeordnete Ticket-Kontaktdaten auf Wunsch korrigieren. Eigenes Konto, abweichendes Käuferkonto und Abendkassenbestellung werden unterschieden. Anleitung: [docs/person-ticket-account.md](docs/person-ticket-account.md).
+
 ## Module
 
 Jedes Modul lässt sich im Admin-Bereich unter **Einstellungen → Module** pro Event an- und ausschalten (oben das Event wählen). Besucher, Beamer und Discord-Befehle richten sich nach dem aktuellen Event. Eine Ausnahme sind die Tickets: Hat ein kommendes Event den Ticketverkauf an, erscheint „Tickets“ auch dann, wenn das laufende Event ihn aus hat. Ist ein Modul aus, verschwindet es für Besucher aus Webseite, Beamer und Discord. Der Admin kann es trotzdem schon vorbereiten.
