@@ -122,6 +122,50 @@ beamerSlides.push({
   },
 });
 
+// Admin tables keep independent sort state; moving rows preserves drafts and pending writes.
+const peopleCollator = new Intl.Collator('de', { numeric: true, sensitivity: 'base' });
+const personsSort = { key: 'events', direction: 'desc' };
+const participantSort = { key: 'name', direction: 'asc' };
+function peopleSortHeader(key, label) {
+  return `<th><button type="button" class="small" data-sort="${esc(key)}" data-label="${esc(label)}">${esc(label)}</button></th>`;
+}
+function bindPeopleSort(tableId, sorting) {
+  const table = document.getElementById(tableId);
+  if (!table?.querySelector) return;
+  const body = table.querySelector('tbody');
+  const buttons = [...table.querySelectorAll('[data-sort]')];
+  const value = (row, key) => {
+    if (key === 'events' || key === 'checkedIn') return Number(row.dataset[key]);
+    if (key === 'seat') {
+      const select = row.querySelector('[data-k="seat"]');
+      return select?.value ? (select.options[select.selectedIndex]?.textContent || '').trim() : '';
+    }
+    return String(row.querySelector(`[data-k="${key}"]`)?.value ?? row.dataset[key] ?? '').trim();
+  };
+  const apply = () => {
+    [...body.children].sort((a, b) => {
+      const av = value(a, sorting.key), bv = value(b, sorting.key);
+      if ((av === '') !== (bv === '')) return av === '' ? 1 : -1;
+      const order = typeof av === 'number' ? av - bv : peopleCollator.compare(av, bv);
+      return (sorting.direction === 'desc' ? -order : order)
+        || peopleCollator.compare(value(a, 'name'), value(b, 'name'))
+        || peopleCollator.compare(a.dataset.pid || a.dataset.id, b.dataset.pid || b.dataset.id);
+    }).forEach((row) => body.appendChild(row));
+    buttons.forEach((button) => {
+      const active = button.dataset.sort === sorting.key;
+      if (active) button.parentElement.setAttribute('aria-sort', sorting.direction === 'asc' ? 'ascending' : 'descending');
+      else button.parentElement.removeAttribute('aria-sort');
+      button.textContent = button.dataset.label + (active ? (sorting.direction === 'asc' ? ' ▲' : ' ▼') : '');
+      button.setAttribute('aria-label', `${button.dataset.label}: ${active && sorting.direction === 'asc' ? 'absteigend' : 'aufsteigend'} sortieren`);
+    });
+  };
+  buttons.forEach((button) => { button.onclick = () => {
+    sorting.direction = sorting.key === button.dataset.sort && sorting.direction === 'asc' ? 'desc' : 'asc';
+    sorting.key = button.dataset.sort; apply();
+  }; });
+  apply();
+}
+
 // ---------- Admin: Teilnehmer ----------
 adminViews.teilnehmer = {
   label: 'Teilnehmer', module: 'people', order: 30, events: ['people'],
@@ -154,8 +198,8 @@ adminViews.teilnehmer = {
         </div>
       </div>
       <div class="card editor"><h2>Alle (${data.people.length})</h2>
-        ${data.people.length ? `<div style="overflow-x:auto"><table class="people-admin"><thead><tr><th>Name</th><th>Clan</th><th>Discord</th><th>Steam</th><th>Notiz</th>${on('seating') ? '<th>Platz</th>' : ''}<th></th></tr></thead><tbody>
-        ${data.people.map((p) => `<tr data-id="${p.id}">
+        ${data.people.length ? `<div style="overflow-x:auto"><table id="participantsTable" class="people-admin"><thead><tr>${peopleSortHeader('name', 'Name')}${peopleSortHeader('clan', 'Clan')}${peopleSortHeader('discordName', 'Discord')}${peopleSortHeader('steam', 'Steam')}${peopleSortHeader('note', 'Notiz')}${on('seating') ? peopleSortHeader('seat', 'Platz') : ''}<th></th></tr></thead><tbody>
+        ${data.people.map((p) => `<tr data-id="${p.id}" data-discord-name="${esc(p.discordName || '')}">
           <td><input data-k="name" value="${esc(p.name)}"></td>
           <td><input data-k="clan" value="${esc(p.clan || '')}" placeholder="Clan" maxlength="40" style="max-width:130px"></td>
           <td class="nowrap">${p.discordName ? `💬 ${esc(p.discordName)} <button class="small" data-unlink title="Verknüpfung lösen">✕</button>` : '<button class="small" data-link>Discord verknüpfen</button>'}
@@ -167,6 +211,7 @@ adminViews.teilnehmer = {
         </tr>`).join('')}</tbody></table></div>` : '<p class="meta">Noch niemand.</p>'}
       </div>`;
 
+    bindPeopleSort('participantsTable', participantSort);
     if (document.getElementById('pKnown')) {
       document.getElementById('pKnown').onsubmit = async (e) => {
         e.preventDefault();
@@ -298,7 +343,7 @@ function bindPersonAccount(app) {
 adminViews.personen = {
   label: 'Personen', module: 'people', order: 32, events: ['people', 'tickets', 'accounts'], preserveDraft: true,
   async render() {
-    const persons = (await api('GET', '/persons')).sort((a, b) => b.events.length - a.events.length || a.name.localeCompare(b.name, 'de'));
+    const persons = await api('GET', '/persons');
     const q = PersonsAdmin.q.toLowerCase();
     const shown = persons.filter((p) => !q || [p.name, p.clan, p.discordName, p.note].join(' ').toLowerCase().includes(q));
     const eventCount = (state.events || { events: [] }).events.length;
@@ -317,8 +362,8 @@ adminViews.personen = {
         <input id="psSearch" type="search" placeholder="Suchen …" value="${esc(PersonsAdmin.q)}" style="max-width:240px"></div>
         <p class="meta">Personen gelten für alle Events. Hier siehst du, wer wie oft dabei war (Teilnehmerliste) und wie oft per Ticket eingecheckt hat.
           Doppelte Einträge derselben Person führst du mit „Zusammenführen“ zusammen.</p>
-        ${shown.length ? `<div style="overflow-x:auto"><table class="people-admin"><thead><tr><th>Name</th><th>Clan</th><th>Dabei</th><th>Eingecheckt</th><th>Discord</th><th>Steam</th><th>Notiz</th><th></th></tr></thead><tbody>
-        ${shown.map((p) => `<tr data-pid="${p.id}">
+        ${shown.length ? `<div style="overflow-x:auto"><table id="personsTable" class="people-admin"><thead><tr>${peopleSortHeader('name', 'Name')}${peopleSortHeader('clan', 'Clan')}${peopleSortHeader('events', 'Dabei')}${peopleSortHeader('checkedIn', 'Eingecheckt')}${peopleSortHeader('discordName', 'Discord')}${peopleSortHeader('steam', 'Steam')}${peopleSortHeader('note', 'Notiz')}<th></th></tr></thead><tbody>
+        ${shown.map((p) => `<tr data-pid="${p.id}" data-events="${p.events.length}" data-checked-in="${p.checkedIn || 0}" data-discord-name="${esc(p.discordName || '')}">
           <td><input data-k="name" value="${esc(p.name)}"></td>
           <td><input data-k="clan" value="${esc(p.clan || '')}" placeholder="Clan" maxlength="40" style="max-width:130px"></td>
           <td class="nowrap" title="${esc(p.events.map((e) => e.name).join(', '))}"><strong>${p.events.length}×</strong>
@@ -333,6 +378,7 @@ adminViews.personen = {
         </tr>`).join('')}</tbody></table></div>` : '<p class="meta">Keine Personen gefunden.</p>'}
       </div>`;
 
+    bindPeopleSort('personsTable', personsSort);
     bindPersonAccount(app);
     app.querySelectorAll('[data-ticket-account]').forEach((button) => {
       button.onclick = () => openPersonAccount(button.dataset.ticketAccount);

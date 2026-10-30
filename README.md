@@ -37,6 +37,8 @@ Das System verwaltet mehrere LAN-Events (z. B. „Seniorenlan #12“, „#13“)
 
 **Personen und Statistik:** Personen bleiben über alle Events erhalten. Im Reiter **Teilnehmer** übernimmt die Orga bekannte Personen ins Event. Ticketnamen sind keine Identitätsnachweise: Neue Tickets erhalten eigene Personen, sofern die Orga bei der Abendkasse nicht ausdrücklich eine bestehende Person auswählt. Namensgleichheit führt nicht automatisch zur Zusammenführung. Der Reiter **Personen** zeigt Events und Check-ins. Zusammenführen ist nur bei kompatiblen Ticket-Eigentümern und Discord-Verknüpfungen möglich.
 
+**Sortieren:** In **Admin → Personen** und **Admin → Teilnehmer** die gewünschte Spaltenüberschrift anklicken; ein weiterer Klick kehrt die Sortierrichtung um. Namen und Sitzplätze werden natürlich sortiert (z. B. Platz 2 vor Platz 10), Teilnahmen und Check-ins numerisch. Leere Angaben stehen zuletzt. Beide Listen merken sich ihre Sortierung während der Sitzung; die Sortierung verändert keine Personendaten und lädt offene Eingabeformulare nicht neu.
+
 **Ticketkonto bearbeiten:** Von **Admin → Personen** aus kann die Orga zugeordnete Ticket-Kontaktdaten auf Wunsch korrigieren. Eigenes Konto, abweichendes Käuferkonto und Abendkassenbestellung werden unterschieden. Anleitung: [docs/person-ticket-account.md](docs/person-ticket-account.md).
 
 ## Module
