@@ -92,7 +92,7 @@ Er kennt diese Slash-Befehle:
 | `/team gruenden`, `/team beitreten`, `/team verlassen` | Teams für Teamturniere bilden. |
 | `/programm` | Die nächsten Programmpunkte. |
 | `/jetzt` | Turnierspiele, die gerade dran sind. |
-| `/platz [name]` | Wo sitzt jemand? |
+| `/platz [name]` | Wo sitzt jemand? Nur wenn Teilnehmerliste **und** Sitzplan für den Aufrufer sichtbar sind (auch in der Autovervollständigung) |
 | `/ticket` | Eigene Tickets und Zahlungsstatus für laufende und kommende Events |
 
 Verknüpfte Spieler werden in Discord erwähnt, wenn ihr Spiel dran ist.
