@@ -431,6 +431,19 @@ function applyMembers(t, names, renames = {}) {
     .filter(([name]) => names.includes(name)));
 }
 
+// Personenauswahl der Orga im Turnierformular: { Eintragsname: Personen-ID | null }. Nur eigene Schlüssel,
+// nur Einträge dieses Turniers und nur Personen, die genau so heißen (keine veraltete oder abweichende Auswahl).
+function chosenPlayers(names, raw) {
+  if (raw === undefined) return {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new HttpError(400, 'Ungültige Personenauswahl');
+  return Object.fromEntries(Object.entries(raw).filter(([name]) => names.includes(name)).map(([name, id]) => {
+    if (id === null) return [name, null];
+    const p = typeof id === 'string' && db.persons.find((x) => x.id === id);
+    if (!p || p.name !== name) throw new HttpError(400, `Ausgewählte Person passt nicht zu „${name.slice(0, 60)}“`);
+    return [name, p.id];
+  }));
+}
+
 // Für Discord-Befehle (/anmelden, /team …)
 const tournamentApi = {
   openForSignup: () => db.tournaments.filter((t) => t.status === 'draft' && t.signup),
@@ -532,13 +545,18 @@ async function api(req, res, url) {
       if (adminRole && !/^[1-9]\d{16,19}$/.test(adminRole)) throw new HttpError(400, 'Adminrolle: Bitte eine eindeutige Discord-Rollen-ID angeben, keinen Rollennamen');
       const cur = settings();
       const num = (v, min, max, def) => { const n = Number(v); return Number.isFinite(n) ? Math.min(Math.max(n, min), max) : def; };
-      if (b.eventName !== undefined) {
-        const name = str(b.eventName, 60) || 'LAN-Party';
-        cur.eventName = name; // nur noch Vorgabe – die Namen stehen an den Events
+      // Texte und DMX vor allen Änderungen prüfen: eine abgelehnte Anfrage ändert nichts.
+      const eventName = b.eventName !== undefined ? str(b.eventName, 60) : undefined;
+      const announceRole = b.announceRole !== undefined ? str(b.announceRole, 100) : undefined;
+      const dmx = b.dmx ? { url: str(b.dmx.url, 200), universe: num(b.dmx.universe, 0, 65535, 1), on: str(b.dmx.on, 500), off: str(b.dmx.off, 500) } : null;
+      if (dmx) {
+        if (dmx.url && !/^https?:\/\//.test(dmx.url)) throw new HttpError(400, 'OLA-Adresse muss mit http:// beginnen');
+        try { Dmx.parseValues(dmx.on); Dmx.parseValues(dmx.off); } catch (err) { throw new HttpError(400, err.message); }
       }
+      if (eventName !== undefined) cur.eventName = eventName || 'LAN-Party'; // nur noch Vorgabe – die Namen stehen an den Events
       if (b.beamerSeconds !== undefined) cur.beamerSeconds = num(b.beamerSeconds, 5, 600, 20);
       if (b.announceSeconds !== undefined) cur.announceSeconds = num(b.announceSeconds, 0, 3600, 60);
-      if (b.announceRole !== undefined) cur.announceRole = str(b.announceRole, 100);
+      if (announceRole !== undefined) cur.announceRole = announceRole;
       if (adminRole !== undefined && adminRole !== cur.adminRole) {
         cur.adminRole = adminRole;
         Security.log('admin_role_changed', req);
@@ -556,12 +574,7 @@ async function api(req, res, url) {
         e.access = { ...(e.access || {}) };
         for (const k of RESTRICTABLE) if (b.access[k] !== undefined) e.access[k] = b.access[k] === 'tickets' ? 'tickets' : 'public';
       }
-      if (b.dmx) {
-        const d = { url: str(b.dmx.url, 200), universe: num(b.dmx.universe, 0, 65535, 1), on: str(b.dmx.on, 500), off: str(b.dmx.off, 500) };
-        if (d.url && !/^https?:\/\//.test(d.url)) throw new HttpError(400, 'OLA-Adresse muss mit http:// beginnen');
-        try { Dmx.parseValues(d.on); Dmx.parseValues(d.off); } catch (err) { throw new HttpError(400, err.message); }
-        cur.dmx = d;
-      }
+      if (dmx) cur.dmx = dmx;
       save(); broadcast('settings');
       Security.log('settings_changed', req, { keys: Object.keys(b) });
       return send(res, 200, await scopedView());
@@ -628,12 +641,13 @@ async function api(req, res, url) {
         signup: !!body.signup, // Anmeldung über Discord offen (solange Entwurf)
         members: {},
         participants: cleanParticipants(body.participants || []),
+        playerIds: {},
         order: [],
         results: {},
         status: 'draft',
         createdAt: new Date().toISOString(),
       };
-      Access.bindPlayers(db, t);
+      Access.bindPlayers(db, t, false, chosenPlayers(t.participants, body.playerIds));
       db.tournaments.unshift(t);
       if (t.discordEnabled) discordSync(t);
       save(); broadcast('tournament', t.id);
@@ -663,6 +677,9 @@ async function api(req, res, url) {
     if (method === 'PUT') {
       requireAdmin(req);
       const body = await readBody(req);
+      // Teilnehmer und Personenauswahl vor jeder Änderung prüfen
+      const names = body.participants !== undefined ? cleanParticipants(body.participants) : null;
+      const chosen = names ? chosenPlayers(names, body.playerIds) : {};
       if (body.name !== undefined) {
         const name = str(body.name);
         if (!name) throw new HttpError(400, 'Name fehlt');
@@ -670,8 +687,7 @@ async function api(req, res, url) {
       }
       if (body.game !== undefined) t.game = str(body.game);
       const renames = Object.create(null); // für Discord: Kanäle umbenennen statt neu anlegen (Namen als reine Daten)
-      if (body.participants !== undefined) {
-        const names = cleanParticipants(body.participants);
+      if (names) {
         if (t.status !== 'draft' && names.length !== t.participants.length)
           throw new HttpError(400, 'Während das Turnier läuft, können Teilnehmer nur umbenannt werden (gleiche Anzahl, gleiche Reihenfolge).');
         if (names.length === t.participants.length) {
@@ -679,7 +695,7 @@ async function api(req, res, url) {
         }
         applyMembers(t, names, renames);
         t.participants = names;
-        Access.bindPlayers(db, t, true);
+        Access.bindPlayers(db, t, true, chosen);
       }
       if (body.discordEnabled !== undefined) t.discordEnabled = !!body.discordEnabled;
       if (body.signup !== undefined) t.signup = !!body.signup;
@@ -768,13 +784,18 @@ async function api(req, res, url) {
 
   // /api/tournaments/:id/matches/:mid
   if (parts[2] === 'matches' && parts[3]) {
+    // Nur Melden (POST) und Zurücknehmen (DELETE, Admin). Methode und Zugang vor der Spielplanberechnung prüfen,
+    // damit anonyme oder unzulässige Anfragen keine vollständige Berechnung auslösen.
+    if (method !== 'POST' && method !== 'DELETE') throw new HttpError(405, 'Methode nicht erlaubt');
+    const admin = isAdmin(req);
+    if (method === 'DELETE') requireAdmin(req);
+    else if (!admin) { Security.rateLimit(req, 'result', 30, 60000); modules.accounts.requireUser(req); }
     // Erst den vollständigen Body abwarten, danach den aktuellen Zustand atomar prüfen/ändern.
     const body = method === 'POST' ? await readBody(req) : null;
     if (t.status !== 'running') throw new HttpError(400, 'Turnier läuft nicht');
     const view = Bracket.compute(t);
     const m = view.matches.find((x) => x.id === parts[3]);
     if (!m) throw new HttpError(404, 'Spiel nicht gefunden');
-    const admin = isAdmin(req);
 
     if (method === 'DELETE') {
       requireAdmin(req);
@@ -789,7 +810,6 @@ async function api(req, res, url) {
     }
 
     if (method === 'POST') {
-      if (!admin) Security.rateLimit(req, 'result', 30, 60000);
       if (!admin) {
         const account = modules.accounts.requireUser(req);
         if (!Access.mayReport(db, account.id, t, m)) throw new HttpError(403, 'Nur beteiligte Spieler oder Teammitglieder dürfen das Ergebnis eintragen');
