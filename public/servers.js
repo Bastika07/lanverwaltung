@@ -50,9 +50,10 @@ views.server = {
       ${GS.last ? serverResult(GS.last) : ''}
       <div class="two"><div>${form}
         ${mine.length ? `<div class="card"><h2>Deine Server</h2><table class="admin-list"><tbody>${mine.map((s) => `<tr>
-          <td><strong>${esc(s.fqdn)}</strong> ${copyBtn(s.fqdn)}<div class="meta markdown">${markdown(s.description)}</div><div class="meta">${s.reverse ? 'Reverse-DNS' : ''}${s.blocked ? ' · <strong>gesperrt</strong>' : ''}</div></td>
+          <td><strong>${esc(s.fqdn)}</strong> ${copyBtn(s.fqdn)}<div class="meta markdown">${markdown(s.description)}</div><div class="meta">${[s.reverse ? 'Reverse-DNS' : '', s.blocked ? '<strong>gesperrt – nur die Orga kann entsperren</strong>' : '',
+            !s.blocked && !s.eligible ? '<strong>inaktiv – kein gültiges Teilnehmerticket</strong>' : ''].filter(Boolean).join(' · ')}</div></td>
           <td class="nowrap"><code>${esc(s.ip)}</code> ${copyBtn(s.ip)}</td>
-          <td><button class="small danger" data-gsdel="${s.id}" title="Abmelden">🗑</button></td></tr>`).join('')}</tbody></table></div>` : ''}</div>
+          <td>${s.blocked ? '' : `<button class="small danger" data-gsdel="${s.id}" title="Abmelden">🗑</button>`}</td></tr>`).join('')}</tbody></table></div>` : ''}</div>
         <div class="card"><h2>Alle Gastserver (${d.servers.length})</h2>
           ${d.servers.length ? `<table class="admin-list"><tbody>${d.servers.map((s) => `<tr>
             <td><strong>${esc(s.fqdn)}</strong><div class="meta markdown">${markdown(s.description)}</div>${s.owner ? `<div class="meta">${esc(s.owner)}</div>` : ''}</td>
@@ -101,14 +102,14 @@ adminViews.server = {
           <p class="hint">Nächste freie IP: <strong>${d.free ? esc(d.free) : '– keine –'}</strong>. Anmelden dürfen Teilnehmer mit Ticket; sie bekommen IP und FQDN sofort.</p>
         </form>
         <div class="card"><h2>DNS-Einträge</h2>
-          <p class="meta">Die Einträge legst du selbst im DNS-Server an: A-Records für alle aktiven Server, PTR nur dort, wo ein Reverse-Eintrag gewünscht ist.</p>
+          <p class="meta">Die Einträge legst du selbst im DNS-Server an: A-Records für alle aktiven Server, PTR nur dort, wo ein Reverse-Eintrag gewünscht ist. Gesperrte Server und Server ohne gültiges Teilnehmerticket fehlen im Export.</p>
           <div class="row"><a class="btn" href="/api/servers/export.txt${q}" target="_blank" rel="noopener">📄 Zonendatei-Zeilen</a>
             <a class="btn" href="/api/servers/export.csv${q}">⬇ CSV</a></div>
         </div>
       </div>
       <div class="card"><h2>Gastserver (${d.servers.length})</h2>
         ${d.servers.length ? `<div style="overflow-x:auto"><table class="admin-list"><tbody>${d.servers.map((s) => `<tr class="${s.blocked ? 'past' : ''}">
-          <td><strong>${esc(s.fqdn)}</strong>${s.blocked ? ' <span class="badge">gesperrt</span>' : ''}<div class="meta markdown">${markdown(s.description)}</div></td>
+          <td><strong>${esc(s.fqdn)}</strong>${s.blocked ? ' <span class="badge">gesperrt</span>' : ''}${s.eligible ? '' : ' <span class="badge" title="Betreiber hat kein gültiges Teilnehmerticket mehr: nicht in öffentlicher Liste und DNS-Export">ohne Ticket</span>'}<div class="meta markdown">${markdown(s.description)}</div></td>
           <td class="nowrap"><code>${esc(s.ip)}</code></td>
           <td class="nowrap">${s.reverse ? '↩ PTR' : '<span class="meta">kein PTR</span>'}</td>
           <td>${esc(s.owner)}<div class="meta">${new Date(s.createdAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}</div></td>
