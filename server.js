@@ -366,15 +366,14 @@ function announce(t, lines) {
   }, 'tournaments', t.participants.flatMap((_, i) => playerIds(t, i))); // nur Spieler dieses Turniers anpingen
 }
 
-// Discord-IDs der Spieler eines Teilnehmers (Person oder Team-Mitglieder)
+// Discord-IDs der Spieler eines Teilnehmers (Team-Mitglieder bzw. die gebundene Person, nie über den Namen)
 function playerIds(t, idx) {
   if (!settings().mentionPlayers || !modules.people || !moduleOn('people')) return [];
   const name = t.participants[idx];
   const team = t.members && Object.hasOwn(t.members, name) ? t.members[name] : null;
-  const ids = team
-    ? team.map((id) => modules.people.byId(id)).filter(Boolean).map((p) => p.discordId)
-    : [modules.people.byName(name)?.discordId];
-  return ids.filter(Boolean);
+  const bound = t.playerIds && Object.hasOwn(t.playerIds, name) ? t.playerIds[name] : null;
+  const ids = team || (bound ? [bound] : []);
+  return ids.map((id) => modules.people.byId(id)).filter(Boolean).map((p) => p.discordId).filter(Boolean);
 }
 
 function pings(t, idx) {
