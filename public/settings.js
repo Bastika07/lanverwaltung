@@ -16,6 +16,7 @@ const MODULES = [
   { key: 'servers', label: '🖥️ Gastserver', hint: 'Teilnehmer melden eigene Server an und bekommen IP und FQDN', restrict: true },
   { key: 'tickets', label: '🎟️ Tickets', hint: 'Ticketverkauf mit Discord-Login, Anschrift, Überweisung und Check-in' },
   { key: 'catering', label: '🍽️ Catering', hint: 'Essensangebote, eigene Anmeldung, Gäste zuweisen und Bezahlung verwalten', restrict: true },
+  { key: 'cs2', label: '🔫 CS2-Matches', hint: 'Counter-Strike-2-Matches über TMT2 anlegen und Ergebnisse übernehmen (nur Orga, braucht den TMT2-Container)' },
 ];
 
 adminViews.einstellungen = {
