@@ -216,7 +216,7 @@ Das System ist entlang der OWASP Top 10 gehärtet:
 |---|---|
 | Zugriffskontrolle (A01) | Admin-Funktionen nur mit Admin-Sitzung. Admin-Zugang über die Discord-Rolle, die alle 10 Minuten nachgeprüft wird. Bestellungen, Tickets und Plätze nur für den eigenen Discord-Account. Öffentliche Antworten ohne Anschriften, Discord-IDs oder Discord-Interna. |
 | Kryptografie (A02) | Zufällige 256-Bit-Sitzungstoken. Besucher-Sitzungen werden nur als SHA-256-Hash gespeichert. Hinter HTTPS: `Secure`-Cookies und HSTS. |
-| Injection / XSS (A03) | Alle Ausgaben werden HTML-maskiert, Links nur `http(s)`. CSV-Export mit Schutz gegen Formel-Injection. Discord-Erwähnungen nur gezielt freigegeben, nie `@everyone`. |
+| Injection / XSS (A03) | Alle Ausgaben werden HTML-maskiert, Links nur `http(s)`. CSV-Exporte (Tickets, Gastserver) mit Schutz gegen Formel-Injection: Zeilenumbrüche nur in Anführungszeichen, Formelzeichen am Feld- und Zeilenanfang entschärft. Discord-Erwähnungen nur gezielt freigegeben, nie `@everyone`. |
 | Unsicheres Design (A04) | Rate-Limits für den Passwort-Notzugang (10 Versuche je 15 Min.), Discord-Login, Bestellungen, Ergebnisse und Platzwahl. Kontingente werden serverseitig geprüft. |
 | Fehlkonfiguration (A05) | Content-Security-Policy ohne Inline-Skripte, Clickjacking-Schutz, `nosniff`, Referrer- und Permissions-Policy. Fehlerdetails nur im Log. Timeouts gegen langsame Angriffe, Limits für Anfragegröße und Live-Verbindungen. |
 | Komponenten (A06) | Keine npm-Abhängigkeiten. Container mit schreibgeschütztem Dateisystem, ohne Linux-Capabilities, mit `no-new-privileges`, als Benutzer `node`. |
