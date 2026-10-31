@@ -42,11 +42,9 @@ services:
       DMX_RED_CHANNEL: ${DMX_RED_CHANNEL:-}
       DMX_RESET_SECONDS: ${DMX_RESET_SECONDS:-}
       ANNOUNCE_ROLE_NAME: ${ANNOUNCE_ROLE_NAME:-}
-      # Optional: CS2-Matches über TMT2 (Modul „CS2-Matches“, Container mit --profile tmt2 starten)
-      TMT2_URL: ${TMT2_URL:-}
-      TMT2_TOKEN: ${TMT2_TOKEN:-}
+      # Optional: CS2-Matches über TMT2. TMT2 und der LAN-Client laufen im LAN (docker-compose.lan.yml).
+      TMT2_AGENT_TOKEN: ${TMT2_AGENT_TOKEN:-}
       TMT2_PUBLIC_URL: ${TMT2_PUBLIC_URL:-}
-      TMT2_WEBHOOK_URL: ${TMT2_WEBHOOK_URL:-}
     volumes:
       - turnierbaum-data:/data
     logging:
@@ -55,33 +53,5 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # TMT2 – Tournament Match Tracker 2 für CS2 (Fork von https://github.com/JensForstmann/tmt2, MIT, © Jens Forstmann).
-  # Eigener Container mit eigenem Build; startet nur mit: docker compose --profile tmt2 up -d --build
-  tmt2:
-    profiles: ["tmt2"]
-    build: https://github.com/Bastika07/tmt2.git#d6998679901906e0cd3a36f91c1922337300d25b
-    image: tmt2-lanverwaltung:local
-    container_name: tmt2
-    restart: unless-stopped
-    cap_drop:
-      - ALL
-    security_opt:
-      - no-new-privileges:true
-    pids_limit: 256
-    # Weboberfläche und Log-Empfang: Die CS2-Server schicken ihre Logs hierher, also im LAN erreichbar machen.
-    ports:
-      - "${TMT2_BIND_ADDRESS:-127.0.0.1}:${TMT2_PORT:-8080}:8080"
-    environment:
-      # Adresse, unter der die CS2-Server TMT2 erreichen, z. B. http://192.168.1.10:8080
-      TMT_LOG_ADDRESS: ${TMT2_LOG_ADDRESS:-}
-    volumes:
-      - tmt2-storage:/app/backend/storage
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
 volumes:
   turnierbaum-data:
-  tmt2-storage:

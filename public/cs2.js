@@ -1,9 +1,9 @@
 'use strict';
 /* global api, esc, toast, adminViews, adminTabs, render */
 // CS2-Matches über TMT2 (Fork von JensForstmann/tmt2): Matches für Turnierpaarungen anlegen, Stand verfolgen,
-// Ergebnisse in den Turnierbaum übernehmen. Nur im Admin-Bereich; TMT2 selbst läuft als eigener Container.
+// Ergebnisse in den Turnierbaum übernehmen. Nur im Admin-Bereich; TMT2 und der LAN-Client laufen im LAN bei den CS2-Servern.
 
-const CS2_STATES = { ELECTION: 'Mapwahl', MATCH_MAP: 'läuft', FINISHED: 'beendet', STOPPED: 'abgebrochen' };
+const CS2_STATES = { PENDING: 'wartet auf LAN-Client', ERROR: 'Fehler', ELECTION: 'Mapwahl', MATCH_MAP: 'läuft', FINISHED: 'beendet', STOPPED: 'abgebrochen' };
 const CS2_FORMATS = [['bo1', 'Best of 1'], ['bo3', 'Best of 3'], ['bo5', 'Best of 5']];
 
 function cs2Maps(m) {
@@ -18,8 +18,9 @@ adminViews.cs2 = {
     const formats = CS2_FORMATS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('');
     const app = document.getElementById('app');
     app.innerHTML = `${adminTabs('cs2')}
-      ${d.configured ? '' : `<div class="card hint-card"><h2>TMT2 ist nicht eingerichtet</h2>
-        <p>Starte den TMT2-Container und setze <code>TMT2_URL</code> und <code>TMT2_TOKEN</code> (siehe README, Abschnitt „CS2-Matches (TMT2)“).</p></div>`}
+      ${d.configured ? `<p class="meta">LAN-Client: ${d.agentOnline ? '🟢 verbunden' : `🔴 nicht verbunden${d.agentSeenAt ? ` (zuletzt ${esc(new Date(d.agentSeenAt).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' }))})` : ''} – neue Matches warten, bis er sich meldet`}</p>`
+    : `<div class="card hint-card"><h2>LAN-Client ist nicht eingerichtet</h2>
+        <p>Setze <code>TMT2_AGENT_TOKEN</code> hier und im LAN-Client neben TMT2 (siehe <code>docs/tmt2.md</code>).</p></div>`}
       <div class="two">
         <form id="cs2New" class="card"><h2>Neues Match <span class="meta">${esc(d.event.name)}</span></h2>
           <div class="field"><label for="cs2Pair">Turnierpaarung</label><select id="cs2Pair">
@@ -32,8 +33,8 @@ adminViews.cs2 = {
           <div class="field"><label for="cs2Format">Format</label><select id="cs2Format" style="max-width:200px">${formats}</select></div>
           <p class="error" id="cs2Error"></p>
           <button class="primary" type="submit" ${d.configured ? '' : 'disabled'}>In TMT2 anlegen</button>
-          <p class="hint">TMT2 nimmt einen freien Server aus seiner Gameserver-Verwaltung. Die Spieler wählen ingame mit <code>.team a</code> bzw. <code>.team b</code> ihr Team und bannen und picken die Maps.
-            ${d.webhook ? 'Das Endergebnis kommt automatisch in den Turnierbaum.' : 'Ohne <code>TMT2_WEBHOOK_URL</code> holst du den Stand mit „Abgleichen“.'}</p>
+          <p class="hint">Der LAN-Client legt das Match in TMT2 an; TMT2 nimmt einen freien Server aus seiner Gameserver-Verwaltung. Die Spieler wählen ingame mit <code>.team a</code> bzw. <code>.team b</code> ihr Team und bannen und picken die Maps.
+            Der Client meldet den Stand alle paar Sekunden; das Endergebnis kommt automatisch in den Turnierbaum.</p>
           ${d.publicUrl ? `<p><a class="btn" href="${esc(d.publicUrl)}" target="_blank" rel="noopener">TMT2 öffnen ↗</a></p>` : ''}
         </form>
         <form id="cs2Pool" class="card"><h2>Mappool</h2>
@@ -51,8 +52,7 @@ adminViews.cs2 = {
           <td><span class="badge">${esc(CS2_STATES[m.state] || m.state)}</span>
             ${m.reported ? '<div class="meta">✅ im Turnier eingetragen</div>' : ''}${m.note ? `<div class="meta"><strong>${esc(m.note)}</strong></div>` : ''}</td>
           <td><div class="row">${m.link ? `<a class="btn small" href="${esc(m.link)}" target="_blank" rel="noopener">TMT2 ↗</a>` : ''}
-            <button class="small" data-cs2sync="${esc(m.id)}">Abgleichen</button>
-            <button class="small danger" data-cs2del="${esc(m.id)}" title="In TMT2 beenden und entfernen">🗑</button></div></td></tr>`).join('')}</tbody></table></div>`
+            <button class="small danger" data-cs2del="${esc(m.id)}" title="Entfernen (in TMT2 beendet es der LAN-Client)">🗑</button></div></td></tr>`).join('')}</tbody></table></div>`
     : '<p class="meta">Noch keine Matches.</p>'}
       </div>`;
 
@@ -64,7 +64,7 @@ adminViews.cs2 = {
       const c = d.candidates[Number(pair.value)];
       const body = { format: document.getElementById('cs2Format').value,
         ...(pair.value === 'free' ? { teamA: document.getElementById('cs2A').value, teamB: document.getElementById('cs2B').value } : { tournamentId: c.tournamentId, matchId: c.matchId }) };
-      try { await api('POST', '/cs2/matches', body); toast('Match in TMT2 angelegt'); render(); }
+      try { await api('POST', '/cs2/matches', body); toast('Match angelegt – der LAN-Client überträgt es zu TMT2'); render(); }
       catch (err) { document.getElementById('cs2Error').textContent = err.message; }
     };
     document.getElementById('cs2Pool').onsubmit = async (e) => {
@@ -72,12 +72,9 @@ adminViews.cs2 = {
       try { await api('PUT', '/cs2/config', { mapPool: document.getElementById('cs2Maps').value.split('\n').map((s) => s.trim()).filter(Boolean) }); toast('Gespeichert'); render(); }
       catch (err) { document.getElementById('cs2PoolError').textContent = err.message; }
     };
-    app.querySelectorAll('button[data-cs2sync]').forEach((b) => {
-      b.onclick = async () => { try { await api('POST', `/cs2/matches/${b.dataset.cs2sync}/sync`); render(); } catch (err) { toast(err.message); } };
-    });
     app.querySelectorAll('button[data-cs2del]').forEach((b) => {
       b.onclick = async () => {
-        if (!confirm('Match in TMT2 beenden und hier entfernen? Ein schon übernommenes Ergebnis bleibt im Turnier.')) return;
+        if (!confirm('Match entfernen? Der LAN-Client beendet es in TMT2. Ein schon übernommenes Ergebnis bleibt im Turnier.')) return;
         try { await api('DELETE', '/cs2/matches/' + b.dataset.cs2del); render(); } catch (err) { toast(err.message); }
       };
     });

@@ -1,0 +1,57 @@
+# LAN-Standort: TMT2 und der LAN-Client laufen bei den CS2-Servern. Der Client verbindet sich nur nach außen
+# mit der LAN-Verwaltung (LAN_URL); im LAN muss nichts aus dem Internet erreichbar sein. Siehe docs/tmt2.md.
+# Start: docker compose -f docker-compose.lan.yml --env-file .env.lan up -d --build
+services:
+  # TMT2 – Tournament Match Tracker 2 für CS2 (Fork von https://github.com/JensForstmann/tmt2, MIT, © Jens Forstmann).
+  tmt2:
+    build: https://github.com/Bastika07/tmt2.git#d6998679901906e0cd3a36f91c1922337300d25b
+    image: tmt2-lanverwaltung:local
+    container_name: tmt2
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    # Weboberfläche und Log-Empfang: Die CS2-Server schicken ihre Logs hierher. Nur im LAN freigeben.
+    ports:
+      - "${TMT2_BIND_ADDRESS:-127.0.0.1}:${TMT2_PORT:-8080}:8080"
+    environment:
+      # Adresse, unter der die CS2-Server TMT2 erreichen, z. B. http://192.168.1.10:8080
+      TMT_LOG_ADDRESS: ${TMT2_LOG_ADDRESS:-}
+    volumes:
+      - tmt2-storage:/app/backend/storage
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  tmt2-agent:
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+    image: tmt2-agent:local
+    container_name: tmt2-agent
+    restart: unless-stopped
+    depends_on:
+      - tmt2
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    environment:
+      LAN_URL: ${LAN_URL:?LAN_URL fehlt, z. B. https://lan.example.org}
+      TMT2_AGENT_TOKEN: ${TMT2_AGENT_TOKEN:?TMT2_AGENT_TOKEN fehlt}
+      TMT2_URL: http://tmt2:8080
+      TMT2_TOKEN: ${TMT2_TOKEN:-}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  tmt2-storage:

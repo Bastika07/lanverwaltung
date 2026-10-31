@@ -16,7 +16,7 @@ The upstream license notices are retained in public/vendor/marked.LICENSE.
 https://github.com/markedjs/marked
 
 The optional CS2 match module talks to TMT2 (Tournament Match Tracker 2), which
-runs as a separate container built from the fork https://github.com/Bastika07/tmt2
+runs as a separate container (docker-compose.lan.yml) built from the fork https://github.com/Bastika07/tmt2
 of the original https://github.com/JensForstmann/tmt2 by Jens Forstmann.
 TMT2 is licensed under the MIT License. Copyright (c) 2020 Jens Forstmann.
 
