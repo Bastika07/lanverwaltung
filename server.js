@@ -695,19 +695,18 @@ async function api(req, res, url) {
     if (method === 'PUT') {
       requireAdmin(req);
       const body = await readBody(req);
-      // Teilnehmer und Personenauswahl vor jeder Änderung prüfen
+      // Alle Eingaben vor jeder Änderung prüfen: eine abgelehnte Anfrage ändert nichts.
       const names = body.participants !== undefined ? cleanParticipants(body.participants) : null;
       const chosen = names ? chosenPlayers(names, body.playerIds) : {};
-      if (body.name !== undefined) {
-        const name = str(body.name);
-        if (!name) throw new HttpError(400, 'Name fehlt');
-        t.name = name;
-      }
-      if (body.game !== undefined) t.game = str(body.game);
+      if (names && t.status !== 'draft' && names.length !== t.participants.length)
+        throw new HttpError(400, 'Während das Turnier läuft, können Teilnehmer nur umbenannt werden (gleiche Anzahl, gleiche Reihenfolge).');
+      const name = body.name !== undefined ? str(body.name) : undefined;
+      if (name === '') throw new HttpError(400, 'Name fehlt');
+      const game = body.game !== undefined ? str(body.game) : undefined;
+      if (name !== undefined) t.name = name;
+      if (game !== undefined) t.game = game;
       const renames = Object.create(null); // für Discord: Kanäle umbenennen statt neu anlegen (Namen als reine Daten)
       if (names) {
-        if (t.status !== 'draft' && names.length !== t.participants.length)
-          throw new HttpError(400, 'Während das Turnier läuft, können Teilnehmer nur umbenannt werden (gleiche Anzahl, gleiche Reihenfolge).');
         if (names.length === t.participants.length) {
           names.forEach((n, i) => { if (n !== t.participants[i]) renames[t.participants[i]] = n; });
         }
