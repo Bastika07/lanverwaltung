@@ -123,7 +123,10 @@ const publicSettings = () => ({
   modules: visibleModules(),
 });
 
+// Jede Speicherung erhöht die Revision; zwischengespeicherte Turnieransichten gelten nur bis zur nächsten.
+let revision = 0;
 function save() {
+  revision++;
   try { storage.save(db); }
   catch {
     // Bei Schreibfehlern nicht mit einem ungespeicherten Objektmodell weiterlaufen.
@@ -450,8 +453,19 @@ const tournamentApi = {
   },
 };
 
+// Lesepfade berechnen den Spielplan nur nach Änderungen neu (Rundenturnier mit 256 Teilnehmern: 32.640 Spiele).
+// Die Ansicht wird zwischen Anfragen geteilt und darf nicht verändert werden; schreibende Pfade rechnen selbst.
+const viewCache = new WeakMap();
+function cachedView(t) {
+  const hit = viewCache.get(t);
+  if (hit && hit.revision === revision) return hit.view;
+  const view = Bracket.compute(t);
+  viewCache.set(t, { revision, view });
+  return view;
+}
+
 function summary(t) {
-  const view = t.status === 'running' ? Bracket.compute(t) : null;
+  const view = t.status === 'running' ? cachedView(t) : null;
   return {
     id: t.id, name: t.name, game: t.game, type: t.type, status: t.status,
     participants: t.participants.length, createdAt: t.createdAt,
@@ -633,8 +647,10 @@ async function api(req, res, url) {
     if (isAdmin(req)) return t;
     const { discord, discordStatus, announceError, ...pub } = t;
     const account = modules.accounts.current(req);
-    const view = Bracket.compute(t);
-    return { ...pub, reportableMatches: view ? view.matches.filter((m) => Access.mayReport(db, account && account.id, t, m)).map((m) => m.id) : [] };
+    // Eigene Teilnehmerplätze einmal bestimmen; ohne solche (z. B. anonym) entfällt die Spielplanberechnung ganz.
+    const own = Access.reportableSides(db, account && account.id, t);
+    const view = own.size ? cachedView(t) : null;
+    return { ...pub, reportableMatches: view ? view.matches.filter((m) => own.has(m.a) || own.has(m.b)).map((m) => m.id) : [] };
   };
   if (parts.length === 2) {
     if (method === 'GET') {
