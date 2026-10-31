@@ -434,7 +434,9 @@ function applyMembers(t, names, renames = {}) {
 // Für Discord-Befehle (/anmelden, /team …)
 const tournamentApi = {
   openForSignup: () => db.tournaments.filter((t) => t.status === 'draft' && t.signup),
-  running: () => db.tournaments.filter((t) => t.status === 'running' && !isFinished(t)),
+  // Nur lesend (z. B. /jetzt): zwischengespeicherte Ansicht. isFinished bleibt frisch, weil Schreibpfade es vor save() aufrufen.
+  running: () => db.tournaments.filter((t) => t.status === 'running' && !(cachedView(t) || {}).finished),
+  view: (t) => cachedView(t),
   changed(t) { save(); broadcast('tournament', t.id); },
   setParticipants(t, names, bind = {}) {
     const clean = cleanParticipants(names);
