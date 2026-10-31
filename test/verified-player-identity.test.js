@@ -26,7 +26,7 @@ function setup() {
   const tournaments = vm.runInNewContext(`(${source[1]})`, { db, Access, cleanParticipants: (names) => names.map(String),
     applyMembers() {}, discordSync() {}, save() {}, broadcast() {}, isFinished: () => false, allTournaments: () => db.tournaments, wantsChannels: () => false });
   const commands = require('../lib/commands')({ ...ctx, tournaments, announcements: {}, schedule: {}, mayViewDiscord: () => true });
-  const t = { id: 'cup', name: 'Cup', type: 'ko', status: 'draft', signup: true, teamSize: 1, participants: [], members: {}, order: [], results: {} };
+  const t = { id: 'cup', name: 'Cup', type: 'ko', status: 'draft', signup: true, teamSize: 1, participants: [], members: {}, playerIds: {}, order: [], results: {} };
   db.tournaments.push(t);
   const run = (name, user, opts) => commands.find(name).run({ user, opts });
   const call = async (method, parts, payload) => {
@@ -85,7 +85,10 @@ test('binding: self-claimed names never gain result rights; a deliberate organiz
   assert.equal(Access.isMember(db, attacker.id, event), false);
   Access.bindPlayers(db, t, true);
   assert.equal(t.playerIds.Alice, null);
-  assert.equal(t.playerIds.Carol, db.persons.find((p) => p.name === 'Carol').id, 'organizer-created names still bind');
+  assert.equal(t.playerIds.Carol, null, 'a matching name alone never binds');
+  const carol = db.persons.find((p) => p.name === 'Carol').id;
+  Access.bindPlayers(db, t, true, { Carol: carol });
+  assert.equal(t.playerIds.Carol, carol, 'explicit organizer selection binds');
 
   // Bewusste Freigabe genau dieser Person macht sie geprüft.
   const approve = await call('PUT', ['people', alice.id], { approved: true });
@@ -93,6 +96,8 @@ test('binding: self-claimed names never gain result rights; a deliberate organiz
   assert.equal(alice.selfClaimed, undefined);
   assert.equal(Access.isMember(db, attacker.id, event), true);
   Access.bindPlayers(db, t, true);
+  assert.equal(t.playerIds.Alice, null, 'approval alone does not bind a tournament slot');
+  Access.bindPlayers(db, t, true, { Alice: alice.id });
   assert.equal(t.playerIds.Alice, alice.id);
   assert.equal(Access.mayReport(db, attacker.id, t, { a: 0, b: 1 }), true);
 });
@@ -104,14 +109,14 @@ test('binding: explicit person selection confirms; verified persons with other n
   const single = await call('POST', ['people'], { name: 'Dora' });
   assert.equal(single.data.approved, true);
   t.participants = ['Dora', 'Dora X', 'Alice'];
-  Access.bindPlayers(db, t, true);
+  Access.bindPlayers(db, t, true, { Dora: single.data.id });
   assert.equal(t.playerIds.Dora, single.data.id);
   assert.equal(t.playerIds['Dora X'], null, 'no fuzzy or prefix match');
   assert.equal(t.playerIds.Alice, null);
   await call('POST', ['people'], { personIds: [alice.id] });
   assert.equal(alice.selfClaimed, undefined);
   assert.equal(event.attendees.find((a) => a.personId === alice.id).approved, true);
-  Access.bindPlayers(db, t, true);
+  Access.bindPlayers(db, t, true, { Alice: alice.id });
   assert.equal(t.playerIds.Alice, alice.id);
   db.persons.find((p) => p.id === alice.id).name = 'Alicia';
   Access.bindPlayers(db, t, true);

@@ -661,37 +661,48 @@ function tournamentForm(t, isNew) {
   </form>`;
 }
 
+// Personenbindung im Formular: bestehende (nur Anzeige) und in dieser Sitzung aus der Teilnehmerliste gewählte.
+// Nur die Auswahl wird gesendet; frei getippte Namen bleiben ungebunden (Name ist keine Identität).
+let formBound = new Map(), formPicked = new Map();
+const formNames = () => document.getElementById('fPart').value.split('\n').map((s) => s.trim()).filter(Boolean);
+
 function readForm() {
+  const participants = formNames();
   return {
     name: document.getElementById('fName').value,
     game: document.getElementById('fGame').value,
     type: document.getElementById('fType').value,
     thirdPlace: document.getElementById('fThird').checked,
     gfReset: document.getElementById('fReset').checked,
-    participants: document.getElementById('fPart').value.split('\n').map((s) => s.trim()).filter(Boolean),
+    participants,
+    playerIds: Object.fromEntries(participants.filter((n) => formPicked.has(n)).map((n) => [n, formPicked.get(n)])),
     ...(document.getElementById('fDiscord') ? { discordEnabled: document.getElementById('fDiscord').checked } : {}),
     ...(document.getElementById('fSignup') ? { signup: document.getElementById('fSignup').checked } : {}),
     ...(!document.getElementById('fTeam').disabled ? { teamSize: Number(document.getElementById('fTeam').value) } : {}),
   };
 }
 
-// Auswahl aus der Teilnehmerliste: angehakte Namen werden an die Liste angehängt
+// Auswahl aus der Teilnehmerliste: angehakte Personen werden angehängt bzw. ihr gleichnamiger Eintrag verknüpft
 async function openPeoplePicker() {
   const box = document.getElementById('fPicker');
   if (box.innerHTML) { box.innerHTML = ''; return; }
   const { people } = await api('GET', '/people');
   const part = document.getElementById('fPart');
-  const have = new Set(part.value.split('\n').map((x) => x.trim().toLowerCase()).filter(Boolean));
-  const list = people.filter((p) => !have.has(p.name.toLowerCase())).sort((a, b) => a.name.localeCompare(b.name, 'de'));
-  box.innerHTML = list.length ? `<div class="picker">${list.map((p) => `<label class="check"><input type="checkbox" value="${esc(p.name)}"> ${esc(p.name)}</label>`).join('')}
+  const names = formNames(), have = new Set(names.map((x) => x.toLowerCase()));
+  const bound = new Set([...formBound.values(), ...formPicked.values()]);
+  const list = people.filter((p) => !bound.has(p.id) && (names.includes(p.name) || !have.has(p.name.toLowerCase())))
+    .sort((a, b) => a.name.localeCompare(b.name, 'de'));
+  box.innerHTML = list.length ? `<div class="picker">${list.map((p) => `<label class="check"><input type="checkbox" value="${esc(p.id)}" data-name="${esc(p.name)}"> ${esc(p.name)}${names.includes(p.name) ? ' <span class="meta">(Eintrag verknüpfen)</span>' : ''}</label>`).join('')}
     <div class="row"><button type="button" class="small" id="fPickAll">Alle</button><button type="button" class="small primary" id="fPickOk">Übernehmen</button></div></div>`
     : '<p class="hint">Alle Teilnehmer sind schon in der Liste.</p>';
   const all = document.getElementById('fPickAll');
   if (!all) return;
   all.onclick = () => box.querySelectorAll('input').forEach((c) => { c.checked = true; });
   document.getElementById('fPickOk').onclick = () => {
-    const names = [...box.querySelectorAll('input:checked')].map((c) => c.value);
-    part.value = [part.value.trim(), ...names].filter(Boolean).join('\n');
+    const picked = [...box.querySelectorAll('input:checked')].map((c) => [c.dataset.name, c.value]);
+    picked.forEach(([name, id]) => formPicked.set(name, id));
+    const added = picked.map(([name]) => name).filter((name) => !names.includes(name));
+    part.value = [part.value.trim(), ...added].filter(Boolean).join('\n');
     part.dispatchEvent(new Event('input'));
     box.innerHTML = '';
   };
@@ -700,10 +711,13 @@ async function openPeoplePicker() {
 function bindTournamentForm(t) {
   const pick = document.getElementById('fPick');
   if (pick) pick.onclick = openPeoplePicker;
+  formBound = new Map(Object.entries((t && t.playerIds) || {}).filter(([, id]) => id));
+  formPicked = new Map();
   const part = document.getElementById('fPart');
   const count = () => {
-    const n = part.value.split('\n').filter((s) => s.trim()).length;
-    document.getElementById('partCount').textContent = `${n} Teilnehmer` +
+    const names = formNames(), n = names.length;
+    const linked = names.filter((x) => formBound.has(x) || formPicked.has(x)).length;
+    document.getElementById('partCount').textContent = `${n} Teilnehmer` + (linked ? ` · ${linked} mit Person verknüpft` : '') +
       (document.getElementById('fType').value !== 'rr' && n > 1 ? ` · Baumgröße ${Bracket.nextPow2(n)} · ${Bracket.nextPow2(n) - n} Freilos(e), werden automatisch vergeben` : '')
       + (document.getElementById('fType').value === 'rr' && n % 2 === 1 ? ' · ungerade Anzahl: pro Spieltag hat einer spielfrei' : '');
   };
