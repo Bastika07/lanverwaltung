@@ -541,6 +541,7 @@ adminViews.tickets = {
               </div>
               <h3>Für alle Events</h3>
               <label class="check field"><input type="checkbox" id="sMember" ${s.requireMember ? 'checked' : ''}> Nur Mitglieder unseres Discord-Servers dürfen bestellen</label>
+              ${s.requireMember && !d.memberCheck ? '<p class="error">Ohne Discord-Bot (DISCORD_BOT_TOKEN, DISCORD_GUILD_ID) lässt sich die Mitgliedschaft nicht prüfen: Besucher können sich weder anmelden noch bestellen. Bot einrichten oder die Mitgliedspflicht abschalten.</p>' : ''}
               <div class="row two-inputs">
                 <div class="field"><label for="bHolder">Kontoinhaber</label><input id="bHolder" value="${esc(s.bank.holder)}"></div>
                 <div class="field"><label for="bIban">IBAN</label><input id="bIban" value="${esc(s.bank.iban)}"></div>
