@@ -1,0 +1,62 @@
+{
+  "name": "main absichern – CI und Sicherheitsprüfungen",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": {
+    "ref_name": {
+      "include": ["refs/heads/main"],
+      "exclude": []
+    }
+  },
+  "rules": [
+    { "type": "deletion" },
+    { "type": "non_fast_forward" },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "dismiss_stale_reviews_on_push": true,
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_approving_review_count": 0,
+        "required_review_thread_resolution": true
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": true,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          { "context": "JavaScript syntax and JSON (22)", "integration_id": 15368 },
+          { "context": "JavaScript syntax and JSON (24)", "integration_id": 15368 },
+          { "context": "Validate GitHub Actions workflows", "integration_id": 15368 },
+          { "context": "Analyze (javascript-typescript)", "integration_id": 15368 },
+          { "context": "Analyze (python)", "integration_id": 15368 },
+          { "context": "Unit tests / Node 22 / ubuntu-latest", "integration_id": 15368 },
+          { "context": "Unit tests / Node 24 / ubuntu-latest", "integration_id": 15368 },
+          { "context": "Unit tests / Node 22 / windows-latest", "integration_id": 15368 },
+          { "context": "Unit tests / Node 24 / windows-latest", "integration_id": 15368 },
+          { "context": "npm tests (full suite) / Node 22 / ubuntu-latest", "integration_id": 15368 },
+          { "context": "npm tests (full suite) / Node 24 / ubuntu-latest", "integration_id": 15368 },
+          { "context": "Integration tests / Node 22 / ubuntu-latest", "integration_id": 15368 },
+          { "context": "Integration tests / Node 24 / ubuntu-latest", "integration_id": 15368 },
+          { "context": "Docker build, smoke test and Trivy", "integration_id": 15368 },
+          { "context": "ZAP API (anonym und Käufer)", "integration_id": 15368 }
+        ]
+      }
+    },
+    {
+      "type": "code_scanning",
+      "parameters": {
+        "code_scanning_tools": [
+          {
+            "tool": "CodeQL",
+            "alerts_threshold": "errors",
+            "security_alerts_threshold": "medium_or_higher"
+          }
+        ]
+      }
+    }
+  ]
+}

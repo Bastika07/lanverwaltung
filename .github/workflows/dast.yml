@@ -1,0 +1,58 @@
+name: DAST
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  zap:
+    name: ZAP API (anonym und Käufer)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Node einrichten
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Isolierten Quellcodeexport und Laufzeitimage vorbereiten
+        shell: bash
+        run: |
+          mkdir "$RUNNER_TEMP/dast-source"
+          git archive HEAD | tar -x -C "$RUNNER_TEMP/dast-source"
+          docker build -t lan-system:dast "$RUNNER_TEMP/dast-source"
+      - name: Begrenzte aktive ZAP-Scans ausführen
+        id: scan
+        shell: bash
+        run: sudo sh ops/assessment-zap.sh "$RUNNER_TEMP/dast-source" "$RUNNER_TEMP/dast-reports" lan-system:dast
+      - name: Berichte lesbar machen
+        if: ${{ always() && steps.scan.outcome != 'skipped' }}
+        shell: bash
+        run: sudo chown -R "$(id -u):$(id -g)" "$RUNNER_TEMP/dast-reports"
+      - name: Befunde und vollständige aktive Scans prüfen
+        if: ${{ always() && steps.scan.outcome != 'skipped' }}
+        run: node ops/check-dast.cjs "${{ runner.temp }}/dast-reports"
+      - name: ZAP-Berichte auch bei fehlgeschlagener Prüfung aufbewahren
+        if: ${{ always() && steps.scan.outcome != 'skipped' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dast-${{ github.sha }}
+          path: ${{ runner.temp }}/dast-reports
+          if-no-files-found: error
+          retention-days: 7

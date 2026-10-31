@@ -1,6 +1,6 @@
 'use strict';
 // LAN-System: Turniere, Durchsagen, Programm, Infos, Teilnehmer & Sitzplan – ohne externe Abhängigkeiten.
-// Start: ADMIN_PASSWORD=geheim node server.js
+// Start: HOST=127.0.0.1 node server.js (Notzugang ohne Discord: DATA_DIR/admin-password.txt)
 
 const http = require('http');
 const fs = require('fs');

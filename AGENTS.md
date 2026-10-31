@@ -30,7 +30,7 @@ npm run check             # Syntax aller JS/CJS/MJS und Projekt-JSON
 npm run test:unit         # schnelle Unit-Tests (Liste in ops/run-tests.cjs)
 npm run test:integration  # alle übrigen test/*.test.js
 npm test                  # Gesamtsuite
-ADMIN_PASSWORD=geheim node server.js   # lokal starten, http://127.0.0.1:3000
+HOST=127.0.0.1 node server.js   # lokal starten, http://127.0.0.1:3000 (Notzugang in data/admin-password.txt)
 ```
 
 Es gibt **kein** `npm install`/`npm ci` und keinen Lockfile. Nichts davon anlegen.

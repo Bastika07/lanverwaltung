@@ -2,8 +2,11 @@
 import json
 import os
 
+role_verified = False
+
 
 def zap_started(zap, target):
+    global role_verified
     cookie = os.environ.get('ZAP_AUTH_HEADER_VALUE')
     if cookie:
         zap.replacer.add_rule('synthetic-buyer', 'true', 'REQ_HEADER', 'false', 'Cookie',
@@ -12,6 +15,7 @@ def zap_started(zap, target):
     expected = '"id":"buyer"' if os.environ.get('ZAP_AUTH_HEADER_VALUE') else '"account":null'
     if expected not in response:
         raise RuntimeError('Synthetic ZAP role verification failed')
+    role_verified = True
     print('Synthetic ZAP role verified: ' + ('buyer' if os.environ.get('ZAP_AUTH_HEADER_VALUE') else 'anonymous'))
 
 
@@ -24,6 +28,7 @@ def zap_pre_shutdown(zap):
         status_counts[status] = status_counts.get(status, 0) + 1
     with open('/zap/wrk/coverage.json', 'w', encoding='utf-8') as output:
         json.dump({'role': 'buyer' if os.environ.get('ZAP_AUTH_HEADER_VALUE') else 'anonymous',
+                   'role_verified': role_verified,
                    'active_scans': scans, 'message_count': zap.core.number_of_messages(),
                    'sampled_messages': len(messages), 'response_status_counts': status_counts}, output, indent=2)
     if not scans:
