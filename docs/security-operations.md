@@ -2,6 +2,12 @@
 
 Dokumentierte Eigenprüfung mit Umfang, Befunden, Nachtests und offenen Grenzen: [security-assessment.md](security-assessment.md). Wiederholbare isolierte Prüfungen und Scannerbefehle stehen dort; niemals die öffentlichen Domains oder Produktionsdaten als Fuzzing-Ziel verwenden.
 
+## Discord-Adminrolle nach Rollen-ID
+
+`ADMIN_DISCORD_ROLE` und **Einstellungen → Admin-Zugang** akzeptieren nur die eindeutige Discord-Rollen-ID. Im Discord-Entwicklermodus bei der gewünschten Rolle **ID kopieren** verwenden. Rollen mit gleichem Namen sind keine gleichwertigen Berechtigungen; Umbenennungen ändern die Rollen-ID nicht.
+
+Bestehende Namenskonfigurationen bleiben zur Prüfung sichtbar, gewähren aber keinen rollenbasierten Zugang mehr. Es erfolgt keine automatische Namensauflösung oder Zuordnung zur ersten gleichnamigen Rolle. Als Server-Inhaber, Discord-Administrator oder über den eingerichteten Passwort-Notzugang anmelden, die richtige Rolle prüfen und deren ID ausdrücklich speichern. Bereits gespeicherte Einstellungen haben Vorrang vor der Umgebungsvariable: Nur `.env` zu ändern korrigiert eine bestehende Datenbankkonfiguration nicht. Ungültige Namen, nicht mehr vorhandene Rollen-IDs und fehlende Prüfbarkeit werden im Adminbereich angezeigt. Discord-Störungen erlauben keinen neuen Rollenlogin; Owner-/Administratorrechte bleiben unabhängig von der zusätzlichen Rollen-ID bestehen, setzen aber eine erfolgreiche Discord-Prüfung voraus. Bestehende Discord-Sitzungen werden wie bisher spätestens nach zehn Minuten erneut geprüft.
+
 ## Reverse Proxy und Firewall
 
 `TRUST_PROXY=1` allein vertraut keinen Forwarded-Headern mehr. `TRUSTED_PROXIES` enthält die tatsächlich am Container ankommenden Proxy-IP-Adressen oder enge CIDR-Netze (kommagetrennt, IPv4/IPv6). Nicht die öffentlichen Client-IP-Adressen eintragen. Der Proxy muss Host/Proto überschreiben und die echte Client-IP als letzten X-Forwarded-For-Hop setzen; keine ungeprüften Clientheader durchreichen.
