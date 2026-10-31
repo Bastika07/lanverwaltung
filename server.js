@@ -545,13 +545,18 @@ async function api(req, res, url) {
       if (adminRole && !/^[1-9]\d{16,19}$/.test(adminRole)) throw new HttpError(400, 'Adminrolle: Bitte eine eindeutige Discord-Rollen-ID angeben, keinen Rollennamen');
       const cur = settings();
       const num = (v, min, max, def) => { const n = Number(v); return Number.isFinite(n) ? Math.min(Math.max(n, min), max) : def; };
-      if (b.eventName !== undefined) {
-        const name = str(b.eventName, 60) || 'LAN-Party';
-        cur.eventName = name; // nur noch Vorgabe – die Namen stehen an den Events
+      // Texte und DMX vor allen Änderungen prüfen: eine abgelehnte Anfrage ändert nichts.
+      const eventName = b.eventName !== undefined ? str(b.eventName, 60) : undefined;
+      const announceRole = b.announceRole !== undefined ? str(b.announceRole, 100) : undefined;
+      const dmx = b.dmx ? { url: str(b.dmx.url, 200), universe: num(b.dmx.universe, 0, 65535, 1), on: str(b.dmx.on, 500), off: str(b.dmx.off, 500) } : null;
+      if (dmx) {
+        if (dmx.url && !/^https?:\/\//.test(dmx.url)) throw new HttpError(400, 'OLA-Adresse muss mit http:// beginnen');
+        try { Dmx.parseValues(dmx.on); Dmx.parseValues(dmx.off); } catch (err) { throw new HttpError(400, err.message); }
       }
+      if (eventName !== undefined) cur.eventName = eventName || 'LAN-Party'; // nur noch Vorgabe – die Namen stehen an den Events
       if (b.beamerSeconds !== undefined) cur.beamerSeconds = num(b.beamerSeconds, 5, 600, 20);
       if (b.announceSeconds !== undefined) cur.announceSeconds = num(b.announceSeconds, 0, 3600, 60);
-      if (b.announceRole !== undefined) cur.announceRole = str(b.announceRole, 100);
+      if (announceRole !== undefined) cur.announceRole = announceRole;
       if (adminRole !== undefined && adminRole !== cur.adminRole) {
         cur.adminRole = adminRole;
         Security.log('admin_role_changed', req);
@@ -569,12 +574,7 @@ async function api(req, res, url) {
         e.access = { ...(e.access || {}) };
         for (const k of RESTRICTABLE) if (b.access[k] !== undefined) e.access[k] = b.access[k] === 'tickets' ? 'tickets' : 'public';
       }
-      if (b.dmx) {
-        const d = { url: str(b.dmx.url, 200), universe: num(b.dmx.universe, 0, 65535, 1), on: str(b.dmx.on, 500), off: str(b.dmx.off, 500) };
-        if (d.url && !/^https?:\/\//.test(d.url)) throw new HttpError(400, 'OLA-Adresse muss mit http:// beginnen');
-        try { Dmx.parseValues(d.on); Dmx.parseValues(d.off); } catch (err) { throw new HttpError(400, err.message); }
-        cur.dmx = d;
-      }
+      if (dmx) cur.dmx = dmx;
       save(); broadcast('settings');
       Security.log('settings_changed', req, { keys: Object.keys(b) });
       return send(res, 200, await scopedView());
