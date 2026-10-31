@@ -221,7 +221,7 @@ Das System ist entlang der OWASP Top 10 gehärtet:
 | Fehlkonfiguration (A05) | Content-Security-Policy ohne Inline-Skripte, Clickjacking-Schutz, `nosniff`, Referrer- und Permissions-Policy. Fehlerdetails nur im Log. Timeouts gegen langsame Angriffe, Limits für Anfragegröße und Live-Verbindungen. |
 | Komponenten (A06) | Keine npm-Abhängigkeiten. Container mit schreibgeschütztem Dateisystem, ohne Linux-Capabilities, mit `no-new-privileges`, als Benutzer `node`. |
 | Authentifizierung (A07) | Zeitkonstanter Passwortvergleich mit Verzögerung bei Fehlversuchen. Warnung bei Admin-Passwörtern unter 12 Zeichen. OAuth-`state` gegen untergeschobene Logins. CSRF-Schutz über SameSite-Cookies und Origin-Prüfung. |
-| Integrität (A08) | Eingaben werden serverseitig geprüft und in der Länge begrenzt, nur bekannte Felder werden übernommen. |
+| Integrität (A08) | Eingaben werden serverseitig geprüft und in der Länge begrenzt, nur bekannte Felder werden übernommen. Änderungen werden erst nach vollständiger Prüfung übernommen; eine abgelehnte Anfrage ändert nichts. |
 | Logging (A09) | Sicherheitsereignisse als JSON-Zeilen im Container-Log (`"sec": …`), ohne Namen oder Anschriften. Protokolliert werden Logins, Fehlversuche, abgewehrte Anfragen, Zahlungen, Check-ins und Datenexporte. |
 | SSRF (A10) | Ausgehende Verbindungen nur zu Discord und zur vom Admin eingetragenen OLA-Adresse (`http(s)`). |
 
