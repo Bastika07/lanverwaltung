@@ -203,7 +203,8 @@ adminViews.teilnehmer = {
           <td><input data-k="name" value="${esc(p.name)}"></td>
           <td><input data-k="clan" value="${esc(p.clan || '')}" placeholder="Clan" maxlength="40" style="max-width:130px"></td>
           <td class="nowrap">${p.discordName ? `💬 ${esc(p.discordName)} <button class="small" data-unlink title="Verknüpfung lösen">✕</button>` : '<button class="small" data-link>Discord verknüpfen</button>'}
-            <label class="check"><input type="checkbox" data-approve ${p.approved ? 'checked' : ''}> Orga-Freigabe</label></td>
+            <label class="check"><input type="checkbox" data-approve ${p.approved ? 'checked' : ''}> Orga-Freigabe</label>
+            ${p.selfClaimed ? '<span class="badge" title="Per /ich selbst angelegt, Name nicht geprüft. Erst nach bewusster Orga-Freigabe zählt die Person für Turniernamen und Teilnehmerrechte.">selbst angelegt</span>' : ''}</td>
           <td><input data-k="steam" value="${esc(p.steam)}" placeholder="Steam"></td>
           <td><input data-k="note" value="${esc(p.note)}" placeholder="z. B. Rolle"></td>
           ${on('seating') ? `<td><select data-k="seat">${seatOpts(p)}</select></td>` : ''}
@@ -225,7 +226,8 @@ adminViews.teilnehmer = {
       const names = document.getElementById('pNames').value.split('\n').map((s) => s.trim()).filter(Boolean);
       try {
         const added = await api('POST', '/people', { names });
-        toast(`${added.length} hinzugefügt`);
+        const unchecked = added.filter((p) => p.selfClaimed).length;
+        toast(`${added.length} hinzugefügt${unchecked ? ` – ${unchecked} selbst angelegt, ohne Freigabe: bitte prüfen` : ''}`);
         document.activeElement.blur();
         render();
       } catch (err) { document.getElementById('pError').textContent = err.message; }
