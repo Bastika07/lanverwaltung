@@ -366,15 +366,14 @@ function announce(t, lines) {
   }, 'tournaments', t.participants.flatMap((_, i) => playerIds(t, i))); // nur Spieler dieses Turniers anpingen
 }
 
-// Discord-IDs der Spieler eines Teilnehmers (Person oder Team-Mitglieder)
+// Discord-IDs der Spieler eines Teilnehmers (Team-Mitglieder bzw. die gebundene Person, nie über den Namen)
 function playerIds(t, idx) {
   if (!settings().mentionPlayers || !modules.people || !moduleOn('people')) return [];
   const name = t.participants[idx];
   const team = t.members && Object.hasOwn(t.members, name) ? t.members[name] : null;
-  const ids = team
-    ? team.map((id) => modules.people.byId(id)).filter(Boolean).map((p) => p.discordId)
-    : [modules.people.byName(name)?.discordId];
-  return ids.filter(Boolean);
+  const bound = t.playerIds && Object.hasOwn(t.playerIds, name) ? t.playerIds[name] : null;
+  const ids = team || (bound ? [bound] : []);
+  return ids.map((id) => modules.people.byId(id)).filter(Boolean).map((p) => p.discordId).filter(Boolean);
 }
 
 function pings(t, idx) {
@@ -435,7 +434,9 @@ function applyMembers(t, names, renames = {}) {
 // Für Discord-Befehle (/anmelden, /team …)
 const tournamentApi = {
   openForSignup: () => db.tournaments.filter((t) => t.status === 'draft' && t.signup),
-  running: () => db.tournaments.filter((t) => t.status === 'running' && !isFinished(t)),
+  // Nur lesend (z. B. /jetzt): zwischengespeicherte Ansicht. isFinished bleibt frisch, weil Schreibpfade es vor save() aufrufen.
+  running: () => db.tournaments.filter((t) => t.status === 'running' && !(cachedView(t) || {}).finished),
+  view: (t) => cachedView(t),
   changed(t) { save(); broadcast('tournament', t.id); },
   setParticipants(t, names, bind = {}) {
     const clean = cleanParticipants(names);
