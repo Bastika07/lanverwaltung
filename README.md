@@ -95,7 +95,7 @@ Er kennt diese Slash-Befehle:
 | `/platz [name]` | Wo sitzt jemand? Nur wenn Teilnehmerliste **und** Sitzplan für den Aufrufer sichtbar sind (auch in der Autovervollständigung) |
 | `/ticket` | Eigene Tickets und Zahlungsstatus für laufende und kommende Events |
 
-Verknüpfte Spieler werden in Discord erwähnt, wenn ihr Spiel dran ist.
+Verknüpfte Spieler werden in Discord erwähnt, wenn ihr Spiel dran ist – nur Personen, die dem Turnierplatz zugeordnet sind (Orga-Zuordnung, `/anmelden` bzw. Teammitglieder), nie über einen gleichen Namen.
 
 ## Starten
 
