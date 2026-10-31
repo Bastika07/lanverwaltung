@@ -103,7 +103,7 @@ docker compose up -d --build
 
 Danach auf dem Docker-Host `http://127.0.0.1:3000` öffnen oder die konfigurierte HTTPS-Adresse des Reverse Proxys verwenden. Für externen Zugriff zuerst Bind-Adresse, Proxy-Zuliste und Firewall wie oben beschrieben einrichten. Den Admin-Bereich erreichst du unter „Admin“ mit „Mit Discord anmelden“.
 
-**Admin-Zugang:** Admin ist, wer auf dem Discord-Server die Admin-Rolle hat (`ADMIN_DISCORD_ROLE`, später unter Einstellungen → Admin-Zugang änderbar). Server-Inhaber und Rollen mit Administrator-Recht kommen immer hinein. Der Server prüft die Rolle alle 10 Minuten nach. Abgelaufene Rollenbestätigungen berechtigen bei Discord-Störungen nicht weiter. Dafür braucht es Bot und OAuth-Konfiguration. `ADMIN_PASSWORD` ist ein optionaler Notzugang. Ohne eingerichteten Zugang wird ein Passwort in `/data/admin-password` (bzw. `DATA_DIR/admin-password`) abgelegt, nicht im Log.
+**Admin-Zugang:** Admin ist, wer auf dem Discord-Server die Admin-Rolle hat (`ADMIN_DISCORD_ROLE`, später unter Einstellungen → Admin-Zugang änderbar). Server-Inhaber und Rollen mit Administrator-Recht kommen immer hinein. Der Server prüft die Rolle alle 10 Minuten nach. Abgelaufene Rollenbestätigungen berechtigen bei Discord-Störungen nicht weiter. Dafür braucht es Bot und OAuth-Konfiguration. `ADMIN_PASSWORD` ist ein optionaler Notzugang. Ohne eingerichteten Zugang wird ein zufälliges Passwort in `/data/admin-password.txt` (bzw. `DATA_DIR/admin-password.txt`) abgelegt, nicht im Log.
 
 ## Sicherheitsupdate: bestehende Installationen
 
@@ -113,11 +113,13 @@ Offene Bestellungen reservieren ihr Kontingent nur bis `dueAt`; je Konto und Eve
 
 Regressionstests: `npm test` (Node.js ab 22, keine Discord-/DMX-Aktionen, isolierte Testdaten). Für den Betrieb feste `PUBLIC_URL` und HTTPS verwenden. Forwarded-Header werden nur bei ausdrücklich aktiviertem `TRUST_PROXY` berücksichtigt; der Proxy muss diese überschreiben und direkter Backendzugriff muss eingeschränkt werden. Das Update ersetzt keine vollständige OWASP-/ASVS-Prüfung, TLS-/Containerprüfung oder ein Datenschutz- und Löschkonzept.
 
-Ohne Docker:
+Ohne Docker (nur lokal erreichbar):
 
 ```bash
-ADMIN_PASSWORD=geheim node server.js   # ohne Discord: Anmeldung mit Passwort
+HOST=127.0.0.1 node server.js
 ```
+
+Ohne Discord-Login und ohne `ADMIN_PASSWORD` erzeugt der Server beim ersten Start ein zufälliges Notzugangs-Passwort in `data/admin-password.txt` (bzw. `DATA_DIR/admin-password.txt`). Ein eigenes Passwort (mindestens 12 Zeichen) am besten über `ADMIN_PASSWORD_FILE` aus einer geschützten Datei setzen, nicht direkt in der Kommandozeile. Ohne `HOST` lauscht der Server auf allen Netzwerkschnittstellen (`0.0.0.0`). Für Zugriff aus dem Netz einen Reverse Proxy mit HTTPS davorsetzen und `TRUST_PROXY`/`TRUSTED_PROXIES` wie in [docs/security-operations.md](docs/security-operations.md) beschrieben einrichten.
 
 ## Discord einrichten
 
