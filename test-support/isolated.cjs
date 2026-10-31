@@ -8,7 +8,7 @@ const http = require('node:http');
 const { spawn } = require('node:child_process');
 const { readSnapshot } = require('../lib/storage');
 
-async function isolated(t, { port: requestedPort = 0 } = {}) {
+async function isolated(t, { port: requestedPort = 0, prepare } = {}) {
   const directory = fs.mkdtempSync(path.join(process.env.OPENCODE_TEST_TMP || os.tmpdir(), 'seniorenlan-assessment-'));
   const modules = Object.fromEntries(['details', 'tournaments', 'announcements', 'schedule', 'info', 'people', 'seating', 'beamer', 'tickets', 'servers'].map((key) => [key, true]));
   const stamp = new Date().toISOString();
@@ -31,6 +31,7 @@ async function isolated(t, { port: requestedPort = 0 } = {}) {
     seating: { cols: 3, rows: 1, seats: [{ id: '1111111111', x: 0, y: 0, label: '1', locked: false }], categories: [], areas: [] },
     events: [event('first'), event('second')],
   };
+  if (prepare) prepare(data); // Nur synthetische Testdaten vor dem Start anpassen, niemals die laufende Datenbank.
   fs.writeFileSync(path.join(directory, 'db.json'), JSON.stringify(data));
   const probe = net.createServer(); await new Promise((resolve, reject) => { probe.once('error', reject); probe.listen(requestedPort, '127.0.0.1', resolve); });
   const port = probe.address().port; await new Promise((r) => probe.close(r));

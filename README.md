@@ -42,6 +42,8 @@ Das System verwaltet mehrere LAN-Events (z. B. „Seniorenlan #12“, „#13“)
 
 **Ticketkonto bearbeiten:** Von **Admin → Personen** aus kann die Orga zugeordnete Ticket-Kontaktdaten auf Wunsch korrigieren. Eigenes Konto, abweichendes Käuferkonto und Abendkassenbestellung werden unterschieden. Anleitung: [docs/person-ticket-account.md](docs/person-ticket-account.md).
 
+**Ticketname und Personenidentität:** Käufer dürfen die Anzeigenamen ihrer Tickets ändern. Ist eine Ticketperson mit einem anderen Discord-Konto verknüpft, bleiben deren globaler Name und Clan dabei unverändert. Globale Änderungen sind nur an eigenen verknüpften bzw. eigenen noch ungebundenen Ticketpersonen oder durch Admins möglich; ausdrücklich an der Abendkasse ausgewählte Personen werden durch Ticketnamenänderungen weiterhin nicht umbenannt.
+
 ## Module
 
 Jedes Modul lässt sich im Admin-Bereich unter **Einstellungen → Module** pro Event an- und ausschalten (oben das Event wählen). Besucher, Beamer und Discord-Befehle richten sich nach dem aktuellen Event. Eine Ausnahme sind die Tickets: Hat ein kommendes Event den Ticketverkauf an, erscheint „Tickets“ auch dann, wenn das laufende Event ihn aus hat. Ist ein Modul aus, verschwindet es für Besucher aus Webseite, Beamer und Discord. Der Admin kann es trotzdem schon vorbereiten.
@@ -104,7 +106,7 @@ docker compose up -d --build
 
 Danach auf dem Docker-Host `http://127.0.0.1:3000` öffnen oder die konfigurierte HTTPS-Adresse des Reverse Proxys verwenden. Für externen Zugriff zuerst Bind-Adresse, Proxy-Zuliste und Firewall wie oben beschrieben einrichten. Den Admin-Bereich erreichst du unter „Admin“ mit „Mit Discord anmelden“.
 
-**Admin-Zugang:** Admin ist, wer auf dem Discord-Server die Admin-Rolle hat (`ADMIN_DISCORD_ROLE`, später unter Einstellungen → Admin-Zugang änderbar). Server-Inhaber und Rollen mit Administrator-Recht kommen immer hinein. Der Server prüft die Rolle alle 10 Minuten nach. Abgelaufene Rollenbestätigungen berechtigen bei Discord-Störungen nicht weiter. Dafür braucht es Bot und OAuth-Konfiguration. `ADMIN_PASSWORD` ist ein optionaler Notzugang. Ohne eingerichteten Zugang wird ein zufälliges Passwort in `/data/admin-password.txt` (bzw. `DATA_DIR/admin-password.txt`) abgelegt, nicht im Log.
+**Admin-Zugang:** Admin ist, wer auf dem Discord-Server die Admin-Rolle hat (`ADMIN_DISCORD_ROLE`, ausschließlich die eindeutige Rollen-ID, später unter Einstellungen → Admin-Zugang änderbar). Gleichnamige Rollen gewähren keine Rechte. Alte Rollennamen müssen bewusst durch die kopierte Rollen-ID ersetzt werden; bis dahin ist dieser Zugangsweg gesperrt und eine Warnung sichtbar. Dazu als Server-Inhaber, Discord-Administrator oder über den eingerichteten Passwort-Notzugang anmelden. Server-Inhaber und Rollen mit Administrator-Recht kommen weiterhin hinein. Der Server prüft die Rolle alle 10 Minuten nach. Abgelaufene Rollenbestätigungen berechtigen bei Discord-Störungen nicht weiter. Dafür braucht es Bot und OAuth-Konfiguration. `ADMIN_PASSWORD` ist ein optionaler Notzugang. Ohne eingerichteten Zugang wird ein zufälliges Passwort in `/data/admin-password.txt` (bzw. `DATA_DIR/admin-password.txt`) abgelegt, nicht im Log.
 
 ## Sicherheitsupdate: bestehende Installationen
 
@@ -195,7 +197,7 @@ sudo systemctl disable --now dmx-announce-bot
 
 | Variable | Bedeutung |
 |---|---|
-| `ADMIN_DISCORD_ROLE` | Discord-Rolle (Name oder ID) für den Admin-Bereich, Startwert, danach in den Einstellungen änderbar |
+| `ADMIN_DISCORD_ROLE` | Eindeutige Discord-Rollen-ID für den Admin-Bereich (keine Rollennamen), Startwert, danach in den Einstellungen änderbar |
 | `ADMIN_PASSWORD` | Optionaler Notzugang mit Passwort, alternativ `ADMIN_PASSWORD_FILE`. Leer = nur Discord |
 | `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID` | Discord-Bot (optional), alternativ `DISCORD_BOT_TOKEN_FILE` |
 | `DISCORD_CLIENT_SECRET` | Für „Mit Discord anmelden“ (Ticketverkauf), alternativ `DISCORD_CLIENT_SECRET_FILE` |

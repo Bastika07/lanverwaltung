@@ -60,7 +60,7 @@ const DEFAULT_SETTINGS = {
   beamerSeconds: 20,
   announceSeconds: envNum('DMX_RESET_SECONDS', 60),
   announceRole: env.ANNOUNCE_ROLE_NAME || '',
-  adminRole: env.ADMIN_DISCORD_ROLE || '', // Discord-Rolle für den Admin-Bereich (Name oder ID)
+  adminRole: env.ADMIN_DISCORD_ROLE || '', // Eindeutige Discord-Rollen-ID für den Admin-Bereich
   remindMinutes: 10,
   mentionPlayers: true,
   // Module der LAN-Party, einzeln abschaltbar (z. B. kein Beamer, kein Sitzplan)
@@ -504,10 +504,16 @@ async function api(req, res, url) {
   if (parts[0] === 'settings') {
     requireAdmin(req);
     // Module des Events, das der Admin gerade bearbeitet; alles andere gilt für alle Events
-    const scopedView = () => ({ ...settings(), modules: eventModules(modules.event.scoped()), access: modules.event.scoped().access || {} });
-    if (method === 'GET') return send(res, 200, scopedView());
+    const scopedView = async () => {
+      const adminRoleWarning = await modules.accounts.adminRoleWarning();
+      requireAdmin(req); // Rollenabfrage kann länger dauern; widerrufene Sitzungen erhalten keine Einstellungen.
+      return { ...settings(), adminRoleWarning, modules: eventModules(modules.event.scoped()), access: modules.event.scoped().access || {} };
+    };
+    if (method === 'GET') return send(res, 200, await scopedView());
     if (method === 'PUT') {
       const b = await readBody(req);
+      const adminRole = b.adminRole === undefined ? undefined : str(b.adminRole, 100);
+      if (adminRole && !/^[1-9]\d{16,19}$/.test(adminRole)) throw new HttpError(400, 'Adminrolle: Bitte eine eindeutige Discord-Rollen-ID angeben, keinen Rollennamen');
       const cur = settings();
       const num = (v, min, max, def) => { const n = Number(v); return Number.isFinite(n) ? Math.min(Math.max(n, min), max) : def; };
       if (b.eventName !== undefined) {
@@ -517,9 +523,9 @@ async function api(req, res, url) {
       if (b.beamerSeconds !== undefined) cur.beamerSeconds = num(b.beamerSeconds, 5, 600, 20);
       if (b.announceSeconds !== undefined) cur.announceSeconds = num(b.announceSeconds, 0, 3600, 60);
       if (b.announceRole !== undefined) cur.announceRole = str(b.announceRole, 100);
-      if (b.adminRole !== undefined && str(b.adminRole, 100) !== cur.adminRole) {
-        cur.adminRole = str(b.adminRole, 100);
-        Security.log('admin_role_changed', req, { role: cur.adminRole });
+      if (adminRole !== undefined && adminRole !== cur.adminRole) {
+        cur.adminRole = adminRole;
+        Security.log('admin_role_changed', req);
       }
       if (b.remindMinutes !== undefined) cur.remindMinutes = num(b.remindMinutes, 0, 1440, 10);
       if (b.mentionPlayers !== undefined) cur.mentionPlayers = !!b.mentionPlayers;
@@ -542,7 +548,7 @@ async function api(req, res, url) {
       }
       save(); broadcast('settings');
       Security.log('settings_changed', req, { keys: Object.keys(b) });
-      return send(res, 200, scopedView());
+      return send(res, 200, await scopedView());
     }
   }
 

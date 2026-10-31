@@ -28,10 +28,12 @@ adminViews.einstellungen = {
         <div class="two">
           <div>
             <div class="card"><h2>🔑 Admin-Zugang</h2>
-              <div class="field"><label for="adRole">Discord-Rolle für den Admin-Bereich <span class="meta">(Name oder ID)</span></label>
-                <input id="adRole" value="${esc(s.adminRole || '')}" placeholder="z. B. Orga"></div>
+              <div class="field"><label for="adRole">Discord-Rolle für den Admin-Bereich <span class="meta">(eindeutige Rollen-ID)</span></label>
+                <input id="adRole" value="${esc(s.adminRole || '')}" inputmode="numeric" pattern="[1-9][0-9]{16,19}" maxlength="20" placeholder="Discord-Rollen-ID"></div>
+              ${s.adminRoleWarning ? `<p class="error">${esc(s.adminRoleWarning)}</p>` : ''}
               <p class="hint">Wer diese Rolle hat, meldet sich mit „Mit Discord anmelden“ an. Server-Inhaber und Rollen mit Administrator-Recht
-                kommen immer hinein. Wird die Rolle entzogen, endet die Sitzung nach spätestens 10 Minuten.</p>
+                kommen immer hinein. Wird die Rolle entzogen, endet die Sitzung nach spätestens 10 Minuten.
+                Discord-Entwicklermodus einschalten, dann bei der Rolle „ID kopieren“. Bisherige Rollennamen bewusst durch diese ID ersetzen; Namensgleichheit gewährt keinen Zugang.</p>
             </div>
             <div class="card"><h2>🎮 Events</h2>
               <p class="meta">Name, Zeitraum, Start und Ende der LAN-Events (und damit die Discord-Kanäle) verwaltest du unter <a href="#/admin/events">Events</a>.</p>
