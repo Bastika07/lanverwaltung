@@ -68,7 +68,7 @@ Nach Anpassung über HTTPS mit gefälschten `X-Forwarded-Proto`, `X-Forwarded-Ho
 Eine vom angemeldeten Nutzer ausgelöste Kontolöschung führt synchron aus:
 
 - Konto/Profil einschließlich Discord-E-Mail und alle Besuchersitzungen entfernen; etwaige Discord-Admin-Sitzungen widerrufen.
-- Nur die **tatsächlich per Discord-ID verknüpfte Person** pseudonymisieren: zufälliger Name statt Klarname, Discord, Steam, Clan und interne Notiz leeren. Keine Namensheuristik auf fremde Personen anwenden.
+- Nur die **tatsächlich per Discord-ID verknüpfte Person** pseudonymisieren: zufälliger Name statt Klarname, Discord, Steam, Clan und interne Notiz leeren. Keine Namensheuristik auf fremde Personen anwenden. Turniereinträge erhalten den neuen Namen nur, wenn sie per Personen-ID an diese Person gebunden sind; gleichnamige ungebundene Einträge bleiben unverändert (gilt ebenso für Namensänderungen auf Tickets und durch die Orga).
 - Eigenen Ticketinhabernamen und Einzelturnier-Anzeigenamen dieser Person ersetzen; feste Personen-IDs, Ergebnisse und bezahlte Eintrittscodes erhalten.
 - Käuferbezüge entfernen, offene Bestellungen stornieren. Bezahlte Tickets anderer Inhaber bleiben gültig und unverändert; neue Logins desselben Discord-Kontos erhalten keinen Zugriff auf alte Bestellungen.
 - Gastserver vom Konto trennen und sperren. IP/FQDN bleiben für die Orga erhalten, damit vorhandene DNS-Einträge kontrolliert zurückgenommen werden können. Sperren im System entfernt keine externen DNS-Einträge.
