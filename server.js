@@ -784,13 +784,18 @@ async function api(req, res, url) {
 
   // /api/tournaments/:id/matches/:mid
   if (parts[2] === 'matches' && parts[3]) {
+    // Nur Melden (POST) und Zurücknehmen (DELETE, Admin). Methode und Zugang vor der Spielplanberechnung prüfen,
+    // damit anonyme oder unzulässige Anfragen keine vollständige Berechnung auslösen.
+    if (method !== 'POST' && method !== 'DELETE') throw new HttpError(405, 'Methode nicht erlaubt');
+    const admin = isAdmin(req);
+    if (method === 'DELETE') requireAdmin(req);
+    else if (!admin) { Security.rateLimit(req, 'result', 30, 60000); modules.accounts.requireUser(req); }
     // Erst den vollständigen Body abwarten, danach den aktuellen Zustand atomar prüfen/ändern.
     const body = method === 'POST' ? await readBody(req) : null;
     if (t.status !== 'running') throw new HttpError(400, 'Turnier läuft nicht');
     const view = Bracket.compute(t);
     const m = view.matches.find((x) => x.id === parts[3]);
     if (!m) throw new HttpError(404, 'Spiel nicht gefunden');
-    const admin = isAdmin(req);
 
     if (method === 'DELETE') {
       requireAdmin(req);
@@ -805,7 +810,6 @@ async function api(req, res, url) {
     }
 
     if (method === 'POST') {
-      if (!admin) Security.rateLimit(req, 'result', 30, 60000);
       if (!admin) {
         const account = modules.accounts.requireUser(req);
         if (!Access.mayReport(db, account.id, t, m)) throw new HttpError(403, 'Nur beteiligte Spieler oder Teammitglieder dürfen das Ergebnis eintragen');
