@@ -5,6 +5,9 @@
 
 const GS = { last: null }; // zuletzt angemeldeter Server – Ergebnis oben anzeigen
 
+// Bedienelemente nur aus dem eigenen Markup, nie aus Beschreibungen von Teilnehmern.
+const gsButtons = (root, attr) => [...root.querySelectorAll(`button[${attr}]`)].filter((b) => !b.closest('.markdown'));
+
 function serverResult(s) {
   return `<div class="card hint-card"><h2>✅ ${esc(s.name)} ist angemeldet</h2>
     <dl class="kv"><dt>FQDN</dt><dd><code>${esc(s.fqdn)}</code> ${copyBtn(s.fqdn)}</dd>
@@ -66,7 +69,7 @@ views.server = {
         render();
       } catch (err) { document.getElementById('gsError').textContent = err.message; }
     };
-    app.querySelectorAll('[data-gsdel]').forEach((b) => {
+    gsButtons(app, 'data-gsdel').forEach((b) => {
       b.onclick = async () => {
         if (!confirm('Server abmelden? Die IP wird wieder frei.')) return;
         try { await api('DELETE', '/servers/' + b.dataset.gsdel); GS.last = null; toast('Abgemeldet'); render(); } catch (err) { toast(err.message); }
@@ -123,10 +126,10 @@ adminViews.server = {
         render();
       } catch (err) { document.getElementById('gcError').textContent = err.message; }
     };
-    app.querySelectorAll('[data-gsblock]').forEach((b) => {
+    gsButtons(app, 'data-gsblock').forEach((b) => {
       b.onclick = async () => { await api('POST', `/servers/${b.dataset.gsblock}/block`, { blocked: b.dataset.blocked !== '1' }); render(); };
     });
-    app.querySelectorAll('[data-gsdel]').forEach((b) => {
+    gsButtons(app, 'data-gsdel').forEach((b) => {
       b.onclick = async () => {
         if (!confirm('Gastserver löschen? Die IP wird wieder frei.')) return;
         await api('DELETE', '/servers/' + b.dataset.gsdel);
