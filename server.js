@@ -367,8 +367,9 @@ function announce(t, lines) {
 function playerIds(t, idx) {
   if (!settings().mentionPlayers || !modules.people || !moduleOn('people')) return [];
   const name = t.participants[idx];
-  const ids = (t.members && t.members[name])
-    ? t.members[name].map((id) => modules.people.byId(id)).filter(Boolean).map((p) => p.discordId)
+  const team = t.members && Object.hasOwn(t.members, name) ? t.members[name] : null;
+  const ids = team
+    ? team.map((id) => modules.people.byId(id)).filter(Boolean).map((p) => p.discordId)
     : [modules.people.byName(name)?.discordId];
   return ids.filter(Boolean);
 }
@@ -420,14 +421,12 @@ function announceResult(t, before, matchId, correction) {
 }
 
 // Team-Mitglieder an geänderte Teilnehmerliste anpassen (umbenannt -> mitnehmen, entfernt -> löschen)
+// Teamnamen sind Nutzerdaten (auch „__proto__“): nur eigene Schlüssel lesen, per fromEntries als eigene Felder anlegen.
 function applyMembers(t, names, renames = {}) {
   if (!t.members) return;
-  const next = {};
-  for (const [team, ids] of Object.entries(t.members)) {
-    const name = renames[team] || team;
-    if (names.includes(name)) next[name] = ids;
-  }
-  t.members = next;
+  t.members = Object.fromEntries(Object.entries(t.members)
+    .map(([team, ids]) => [Object.hasOwn(renames, team) ? renames[team] : team, ids])
+    .filter(([name]) => names.includes(name)));
 }
 
 // Für Discord-Befehle (/anmelden, /team …)
@@ -653,7 +652,7 @@ async function api(req, res, url) {
         t.name = name;
       }
       if (body.game !== undefined) t.game = str(body.game);
-      const renames = {}; // für Discord: Kanäle umbenennen statt neu anlegen
+      const renames = Object.create(null); // für Discord: Kanäle umbenennen statt neu anlegen (Namen als reine Daten)
       if (body.participants !== undefined) {
         const names = cleanParticipants(body.participants);
         if (t.status !== 'draft' && names.length !== t.participants.length)
