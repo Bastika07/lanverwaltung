@@ -42,6 +42,9 @@ services:
       DMX_RED_CHANNEL: ${DMX_RED_CHANNEL:-}
       DMX_RESET_SECONDS: ${DMX_RESET_SECONDS:-}
       ANNOUNCE_ROLE_NAME: ${ANNOUNCE_ROLE_NAME:-}
+      # Optional: CS2-Matches über TMT2. TMT2 und der LAN-Client laufen im LAN (docker-compose.lan.yml).
+      TMT2_AGENT_TOKEN: ${TMT2_AGENT_TOKEN:-}
+      TMT2_PUBLIC_URL: ${TMT2_PUBLIC_URL:-}
     volumes:
       - turnierbaum-data:/data
     logging:

@@ -64,7 +64,7 @@ const DEFAULT_SETTINGS = {
   remindMinutes: 10,
   mentionPlayers: true,
   // Module der LAN-Party, einzeln abschaltbar (z. B. kein Beamer, kein Sitzplan)
-  modules: { details: true, tournaments: true, announcements: true, schedule: true, info: true, people: true, seating: true, beamer: true, tickets: false, servers: false, catering: false },
+  modules: { details: true, tournaments: true, announcements: true, schedule: true, info: true, people: true, seating: true, beamer: true, tickets: false, servers: false, catering: false, cs2: false },
   dmx: {
     url: env.OLA_URL || '',
     universe: Number(env.DMX_UNIVERSE) || 1,
@@ -460,6 +460,24 @@ const tournamentApi = {
     Access.bindPlayers(db, t);
     if (t.discordEnabled !== false) discordSync(t);
     save(); broadcast('tournament', t.id);
+  },
+  // Ergebnis aus TMT2 (lib/tmt.js): nur für ein offenes Spiel mit unveränderter Paarung, nie als Korrektur.
+  // Gibt null zurück oder einen Hinweis, warum nichts eingetragen wurde.
+  reportResult(t, matchId, a, b, pa, pb) {
+    if (t.status !== 'running') return 'Turnier läuft nicht – Ergebnis bitte von Hand eintragen';
+    const view = Bracket.compute(t);
+    const m = view.matches.find((x) => x.id === matchId);
+    if (!m) return 'Spiel nicht mehr im Turnierbaum – Ergebnis bitte von Hand eintragen';
+    if (m.status === 'done') return m.score.a === a && m.score.b === b && m.a === pa && m.b === pb ? null : 'Im Turnier steht schon ein anderes Ergebnis';
+    if (m.status !== 'ready' || m.a !== pa || m.b !== pb) return 'Die Paarung hat sich geändert – Ergebnis bitte von Hand eintragen';
+    if (!Number.isInteger(a) || !Number.isInteger(b) || (t.type !== 'rr' && a === b)) return 'Kein eindeutiger Sieger – Ergebnis bitte von Hand eintragen';
+    const wasFinished = isFinished(t);
+    t.results[m.id] = { a, b, pa: m.a, pb: m.b, at: new Date().toISOString() };
+    pruneStale(t);
+    discordAfterResult(t, wasFinished);
+    announceResult(t, view, m.id, false);
+    save(); broadcast('tournament', t.id);
+    return null;
   },
   // Event beginnt/endet: Voice-Kanäle aller Turniere anlegen bzw. entfernen
   syncDiscord() {
@@ -915,6 +933,7 @@ ctx.people = modules.people = require('./lib/people.js')(ctx);
 modules.info = require('./lib/info.js')(ctx);
 modules.details = require('./lib/details.js')(ctx);
 modules.servers = require('./lib/servers.js')(ctx);
+modules.cs2 = require('./lib/tmt.js')(ctx); // CS2-Matches über TMT2 (eigener Container)
 ctx.accounts = modules.accounts = require('./lib/accounts.js')(ctx);
 ctx.tickets = modules.tickets = require('./lib/tickets.js')(ctx);
 ctx.seats = modules.seats = require('./lib/seats.js')(ctx);
