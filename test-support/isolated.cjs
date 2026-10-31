@@ -8,7 +8,7 @@ const http = require('node:http');
 const { spawn } = require('node:child_process');
 const { readSnapshot } = require('../lib/storage');
 
-async function isolated(t, { port: requestedPort = 0, prepare } = {}) {
+async function isolated(t, { port: requestedPort = 0, prepare, env: testEnv = {} } = {}) {
   const directory = fs.mkdtempSync(path.join(process.env.OPENCODE_TEST_TMP || os.tmpdir(), 'seniorenlan-assessment-'));
   const modules = Object.fromEntries(['details', 'tournaments', 'announcements', 'schedule', 'info', 'people', 'seating', 'beamer', 'tickets', 'servers'].map((key) => [key, true]));
   const stamp = new Date().toISOString();
@@ -24,7 +24,8 @@ async function isolated(t, { port: requestedPort = 0, prepare } = {}) {
     serverConfig: { domain: 'guest.invalid', ipFrom: '10.10.50.10', ipTo: '10.10.50.12', open: true, maxPerAccount: 2 }, guestServers: [],
   });
   const tokens = Object.fromEntries(['buyer', 'other', 'outsider'].map((uid) => [uid, crypto.randomBytes(32).toString('hex')]));
-  const data = { meta: { securityVersion: 1, settings: { modules } },
+  // Ohne Discord-Bot keine Mitgliederprüfung möglich; Mitgliedspflicht-Tests aktivieren sie gezielt per prepare.
+  const data = { meta: { securityVersion: 1, settings: { modules }, ticketSettings: { requireMember: false } },
     persons: ['buyer', 'other'].map((id) => ({ id, name: id, discordId: id, ticketOwnerId: id })),
     accounts: Object.keys(tokens).map((id) => ({ id, discordName: id, profile, consentAt: stamp })),
     userSessions: Object.fromEntries(Object.entries(tokens).map(([uid, token]) => [crypto.createHash('sha256').update(token).digest('hex'), { uid, exp: Date.now() + 3600000 }])),
@@ -39,7 +40,8 @@ async function isolated(t, { port: requestedPort = 0, prepare } = {}) {
   // Allowlist environment: never inherit production integration credentials/settings.
   const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: process.env.TEMP, TMP: process.env.TMP,
     PORT: String(port), HOST: '127.0.0.1', DATA_DIR: directory, ADMIN_PASSWORD: password,
-    ...(process.env.NODE_V8_COVERAGE ? { NODE_V8_COVERAGE: process.env.NODE_V8_COVERAGE } : {}) };
+    ...(process.env.NODE_V8_COVERAGE ? { NODE_V8_COVERAGE: process.env.NODE_V8_COVERAGE } : {}),
+    ...testEnv }; // nur ausdrücklich vom Test gesetzte Werte, z. B. lokale Discord-Attrappen
   const child = spawn(process.execPath, ['server.js'], { cwd: path.resolve(__dirname, '..'), env, stdio: ['ignore', 'pipe', 'pipe'] });
   let logs = '', adminCookie;
   child.stdout.on('data', (b) => { logs += b; }); child.stderr.on('data', (b) => { logs += b; });

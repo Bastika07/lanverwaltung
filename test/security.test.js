@@ -15,7 +15,7 @@ const stamp = new Date().toISOString();
 const mods = Object.fromEntries(['details', 'tournaments', 'announcements', 'schedule', 'info', 'people', 'seating', 'beamer', 'tickets', 'servers'].map((k) => [k, true]));
 function fixture() {
   const order = (id, accountId, personId, holder) => ({ id, accountId, ref: `LAN-${id}`, status: 'paid', createdAt: stamp, dueAt: stamp, tickets: [{ id: `t-${id}`, personId, holder, code: `${id}SECRET`, price: 1000, typeId: 'normal' }], total: 1000 });
-  return { meta: { securityVersion: 1, settings: { modules: mods } }, persons: [
+  return { meta: { securityVersion: 1, settings: { modules: mods }, ticketSettings: { requireMember: false } }, persons: [
     { id: 'pa', name: 'Alice', discordId: 'buyer', ticketOwnerId: 'buyer', note: 'PRIVATE', clan: '' },
     { id: 'pb', name: 'Bob', discordId: 'victim', ticketOwnerId: 'victim', note: 'PRIVATE', clan: '' },
   ], events: [{ id: 'reviewevent', name: 'Test', start: null, end: null, active: false, modules: mods,

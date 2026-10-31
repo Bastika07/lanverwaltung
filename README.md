@@ -144,7 +144,7 @@ Privilegierte Intents sind nicht nötig.
    - Ticketarten anlegen (Preis, Kontingent, optional Verkaufszeitraum).
 
 Ablauf für Besucher:
-1. Unter „Tickets“ mit Discord anmelden. Optional dürfen das nur Mitglieder des Discord-Servers, das prüft der Bot.
+1. Unter „Tickets“ mit Discord anmelden. Optional dürfen das nur Mitglieder des Discord-Servers. Das prüft der Bot beim Login und bei jeder Bestellung erneut; ist die Prüfung gestört, wird nicht bestellt. Ohne Bot lässt sich die Mitgliedschaft nicht prüfen: Dann sind Anmeldung und Bestellung gesperrt, und der Admin-Reiter „Tickets“ zeigt einen Hinweis. Bot einrichten oder die Mitgliedspflicht abschalten.
 2. Daten hinterlegen. Sie bleiben für spätere Events gespeichert.
 3. Gibt es Tickets für mehrere Events, oben das Event wählen.
 4. Tickets bestellen und die angezeigten Bankdaten mit dem Verwendungszweck (z. B. `LAN-K7Q2XM`) nutzen.
