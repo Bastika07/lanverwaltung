@@ -313,7 +313,7 @@ async function teamsCard(t) {
   const { people } = await api('GET', '/people').catch(() => ({ people: [] }));
   const byId = Object.fromEntries(people.map((p) => [p.id, p]));
   return `<div class="card" style="margin-top:16px"><h2>👥 Teams</h2><div class="teams">${t.participants.map((team) => {
-    const m = (t.members[team] || []).map((id) => byId[id]).filter(Boolean);
+    const m = (Object.hasOwn(t.members, team) ? t.members[team] : []).map((id) => byId[id]).filter(Boolean); // auch „__proto__“
     return `<div class="team"><strong>${esc(team)}</strong> <span class="meta">(${m.length}/${t.teamSize})</span>
       <div class="meta">${m.map((p, i) => esc(p.name) + (i === 0 ? ' 👑' : '')).join(', ') || '–'}</div></div>`;
   }).join('')}</div></div>`;
