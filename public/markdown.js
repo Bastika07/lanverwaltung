@@ -16,8 +16,24 @@ const markdownParser = new marked.Marked({
   },
 });
 
+// Zweite Schutzschicht am fertigen HTML: Text ist bereits maskiert, übrig bleiben nur Tags des Renderers.
+// Alles, was nicht exakt einem erwarteten Tag entspricht, wird wieder zu Text – auch bei künftigen Parser-Änderungen.
+const MARKDOWN_TAGS = [
+  /^<\/?(?:p|strong|em|del|code|pre|h[1-6]|ul|ol|li|blockquote|table|thead|tbody|tr|th|td)>$/,
+  /^<(?:br|hr)>$/,
+  /^<(?:th|td) align="(?:left|center|right)">$/,
+  /^<ol start="\d{1,9}">$/,
+  /^<code class="language-[\w+#.-]{1,40}">$/,
+  /^<input (?:checked="" )?disabled="" type="checkbox">$/,
+  /^<a href="(?:https?:\/\/|mailto:|#)[^"\s]*"(?: title="[^"]*")? target="_blank" rel="noopener noreferrer">$/i,
+  /^<\/a>$/,
+];
+function sanitizeMarkdownHtml(html) {
+  return html.replace(/<[^>]*>?/g, (tag) => (MARKDOWN_TAGS.some((re) => re.test(tag)) ? tag : esc(tag)));
+}
+
 function markdown(text) {
-  return markdownParser.parse(String(text ?? ''));
+  return sanitizeMarkdownHtml(markdownParser.parse(String(text ?? '')));
 }
 
 function markdownHelp(id) {
