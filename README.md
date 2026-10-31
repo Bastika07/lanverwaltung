@@ -245,6 +245,10 @@ Nicht die laufende SQLite-Hauptdatei allein kopieren: Änderungen können im WAL
 - Für den Gong muss am Beamer einmal auf 🔔 (oder Vollbild) geklickt werden, weil Browser Ton erst nach einer Interaktion erlauben.
 - Für den Betrieb im Internet sollte ein Reverse-Proxy mit HTTPS davor. Im LAN ist das nicht nötig.
 
+## Mit KI entwickelt
+
+Dieses Projekt wurde mit Unterstützung von KI gebaut: Code, Tests und Dokumentation sind größtenteils mit KI-Coding-Agenten (u. a. Claude Code) entstanden und werden vom Maintainer geprüft, getestet und freigegeben. Hinweise für Agenten, die am Projekt mitarbeiten, stehen in [AGENTS.md](AGENTS.md).
+
 ## Lizenz
 
 LAN-Verwaltung steht unter der **[MIT-Lizenz](LICENSE)**. Sie erlaubt private und kommerzielle Nutzung, Änderungen und Weiterverteilung. Der Urheberrechts- und Lizenzhinweis muss in allen Kopien oder wesentlichen Teilen der Software erhalten bleiben. Die Software wird ohne Gewährleistung bereitgestellt.
