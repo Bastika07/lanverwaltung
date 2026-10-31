@@ -41,6 +41,14 @@ JSON-/HTML-Berichte, Coverage und Protokolle bleiben auch nach Fehlern sieben Ta
 
 **Grenzen:** Das vorhandene OpenAPI-Subset umfasst sechs API-Pfade und die Rollen anonym/Käufer. Kein vollständiger Browser-/SPA-Crawl, kein Admin-Scan, kein echter OAuth-End-to-End-Test und keine Prüfung von Produktions-TLS, Proxy oder externen Diensten. Transportfehler einzelner Probeanfragen und HTTP-Statusverteilung stehen im Coverage-Bericht und benötigen separate Bewertung. Ein grüner Scan ersetzt weder die HTTP-Berechtigungstests noch eine vollständige Sicherheitsprüfung. Der Workflow verändert keine Rulesets und führt kein Deployment aus. Den digest-fixierten ZAP-Scanner in `ops/assessment-zap.sh` regelmäßig bewusst aktualisieren.
 
+## Ruleset importieren
+
+Die Vorlage [`.github/rulesets/main.json`](../.github/rulesets/main.json) lässt sich unter **Settings → Rules → Rulesets → New ruleset → Import a ruleset** importieren. Die Datei herunterladen, auswählen, Einstellungen kontrollieren und speichern. Die Vorlage ist auf **Active** eingestellt; das bloße Ablegen im Repository aktiviert nichts.
+
+Sie schützt ausschließlich `main`: Pull Request erforderlich, alle 15 CI-Checks verpflichtend und aktuell zum Zielbranch, CodeQL-Sicherheitsbefunde ab **Mittel** sowie sonstige CodeQL-Fehler blockierend. Force-Push und Branchlöschung sind untersagt. Es gibt keine Bypass-Ausnahmen. Die Zahl notwendiger Review-Zustimmungen ist bewusst **0**, damit ein einzelner Maintainer eigene PRs nach grünen Checks mergen kann; offene Review-Unterhaltungen müssen trotzdem erledigt sein. Für ein Team bei Bedarf mindestens eine Zustimmung einstellen.
+
+Die vorhandenen Checknamen und die GitHub-Actions-App-ID wurden gegen die tatsächlichen Check-Runs des Repositorys geprüft; der neue ZAP-Check entspricht dem Jobnamen im Workflow. Bei Umbenennung eines CI-Jobs auch Ruleset und Vorlage aktualisieren. Erst aktivieren, wenn der DAST-Workflow im PR vorhanden ist und alle Checks erfolgreich gelaufen sind. Nur ein Push auf diesen Featurebranch startet wegen der Branchfilter noch keine CI: Dafür einen Pull Request gegen `main` öffnen. CodeQL muss Ergebnisse für den PR und den Zielbranch haben. Bestehende Befunde können den Merge blockieren; dann bewerten und beheben, nicht das Gate blind abschwächen. Die Code-Scanning-Regel muss vom GitHub-Tarif und der Repository-Konfiguration unterstützt werden.
+
 ## Dependency-Updates
 
 `.github/dependabot.yml` erstellt wöchentlich Update-PRs für GitHub Actions und das Docker-Basisimage. Actions bleiben auf Commit-SHAs, das Node-Image auf einen Digest fixiert. Node-Hauptversionssprünge benötigen eine bewusste Umstellung. Es gibt keine automatischen Merges oder Deployments. Der lokal gebündelte Markdown-Parser und das in `ops/scan-image.sh` fixierte Trivy-Image müssen separat geprüft und aktualisiert werden; Dependabot erfasst diese Shell-/Vendor-Dateien nicht.

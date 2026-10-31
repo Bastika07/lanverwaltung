@@ -79,3 +79,34 @@ test('CI: DAST-CLI meldet fehlende und beschädigte Berichte als Fehler', (t) =>
   fs.writeFileSync(path.join(root, 'buyer', 'report.json'), '{broken');
   assert.equal(run().status, 1);
 });
+
+test('CI: importierbares main-Ruleset verlangt CI und CodeQL ohne Bypass oder fremde Branches', () => {
+  const ruleset = JSON.parse(fs.readFileSync(path.join(__dirname, '../.github/rulesets/main.json'), 'utf8'));
+  assert.equal(ruleset.target, 'branch');
+  assert.equal(ruleset.enforcement, 'active');
+  assert.deepEqual(ruleset.conditions, { ref_name: { include: ['refs/heads/main'], exclude: [] } });
+  assert.deepEqual(ruleset.bypass_actors, []);
+  const rules = new Map(ruleset.rules.map((rule) => [rule.type, rule.parameters]));
+  assert.equal(rules.size, ruleset.rules.length);
+  assert.ok(rules.has('deletion') && rules.has('non_fast_forward'));
+  assert.equal(rules.get('pull_request').required_approving_review_count, 0);
+  assert.equal(rules.get('pull_request').required_review_thread_resolution, true);
+  assert.deepEqual(rules.get('code_scanning').code_scanning_tools, [
+    { tool: 'CodeQL', alerts_threshold: 'errors', security_alerts_threshold: 'medium_or_higher' }
+  ]);
+  const status = rules.get('required_status_checks');
+  assert.equal(status.strict_required_status_checks_policy, true);
+  assert.equal(status.do_not_enforce_on_create, false);
+  const contexts = status.required_status_checks.map((check) => check.context);
+  assert.equal(contexts.length, 15);
+  assert.equal(new Set(contexts).size, contexts.length);
+  assert.ok(status.required_status_checks.every((check) => check.integration_id === 15368));
+  for (const [file, names] of [
+    ['dast.yml', ['ZAP API (anonym und Käufer)']],
+    ['container-security.yml', ['Docker build, smoke test and Trivy']]
+  ]) {
+    const workflow = fs.readFileSync(path.join(__dirname, '../.github/workflows', file), 'utf8');
+    for (const name of names) { assert.ok(contexts.includes(name)); assert.ok(workflow.split(/\r?\n/).includes(`    name: ${name}`)); }
+  }
+  assert.ok(contexts.includes('Analyze (javascript-typescript)') && contexts.includes('Analyze (python)'));
+});
