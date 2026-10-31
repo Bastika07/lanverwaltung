@@ -1,3 +1,4 @@
+[![DAST](https://github.com/Bastika07/lanverwaltung/actions/workflows/dast.yml/badge.svg)](https://github.com/Bastika07/lanverwaltung/actions/workflows/dast.yml)
 [![Unit tests](https://github.com/Bastika07/lanverwaltung/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/Bastika07/lanverwaltung/actions/workflows/unit-tests.yml)
 [![npm tests (full suite)](https://github.com/Bastika07/lanverwaltung/actions/workflows/npm-tests.yml/badge.svg)](https://github.com/Bastika07/lanverwaltung/actions/workflows/npm-tests.yml)
 [![Integration tests](https://github.com/Bastika07/lanverwaltung/actions/workflows/integration-tests.yml/badge.svg)](https://github.com/Bastika07/lanverwaltung/actions/workflows/integration-tests.yml)
