@@ -435,10 +435,12 @@ const tournamentApi = {
   openForSignup: () => db.tournaments.filter((t) => t.status === 'draft' && t.signup),
   running: () => db.tournaments.filter((t) => t.status === 'running' && !isFinished(t)),
   changed(t) { save(); broadcast('tournament', t.id); },
-  setParticipants(t, names) {
+  setParticipants(t, names, bind = {}) {
     const clean = cleanParticipants(names);
     applyMembers(t, clean);
     t.participants = clean;
+    // Selbstanmeldung: das Discord-Konto hat sich gerade selbst eingetragen – direkt an seine Person-ID binden.
+    t.playerIds = Object.fromEntries([...Object.entries(t.playerIds || {}), ...Object.entries(bind)]);
     Access.bindPlayers(db, t);
     if (t.discordEnabled !== false) discordSync(t);
     save(); broadcast('tournament', t.id);
