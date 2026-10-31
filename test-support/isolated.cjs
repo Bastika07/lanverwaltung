@@ -34,29 +34,40 @@ async function isolated(t, { port: requestedPort = 0, prepare, env: testEnv = {}
   };
   if (prepare) prepare(data); // Nur synthetische Testdaten vor dem Start anpassen, niemals die laufende Datenbank.
   fs.writeFileSync(path.join(directory, 'db.json'), JSON.stringify(data));
-  const probe = net.createServer(); await new Promise((resolve, reject) => { probe.once('error', reject); probe.listen(requestedPort, '127.0.0.1', resolve); });
-  const port = probe.address().port; await new Promise((r) => probe.close(r));
-  const base = `http://127.0.0.1:${port}`, password = crypto.randomBytes(32).toString('hex');
-  // Allowlist environment: never inherit production integration credentials/settings.
-  const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: process.env.TEMP, TMP: process.env.TMP,
-    PORT: String(port), HOST: '127.0.0.1', DATA_DIR: directory, ADMIN_PASSWORD: password,
-    ...(process.env.NODE_V8_COVERAGE ? { NODE_V8_COVERAGE: process.env.NODE_V8_COVERAGE } : {}),
-    ...testEnv }; // nur ausdrücklich vom Test gesetzte Werte, z. B. lokale Discord-Attrappen
-  const child = spawn(process.execPath, ['server.js'], { cwd: path.resolve(__dirname, '..'), env, stdio: ['ignore', 'pipe', 'pipe'] });
-  let logs = '', adminCookie;
-  child.stdout.on('data', (b) => { logs += b; }); child.stderr.on('data', (b) => { logs += b; });
+  const password = crypto.randomBytes(32).toString('hex');
+  let port, base, child, logs = '', adminCookie;
   t.after(async () => {
-    if (child.exitCode === null && child.signalCode === null) {
+    if (child && child.exitCode === null && child.signalCode === null) {
       const stopped = new Promise((r) => child.once('exit', r));
       child.kill(); const timer = setTimeout(() => child.kill('SIGKILL'), 2000); await stopped; clearTimeout(timer);
     }
     fs.rmSync(directory, { recursive: true, force: true });
   });
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('Isolated startup timeout')), 8000);
-    child.stdout.on('data', () => { if (logs.includes('LAN-System läuft')) { clearTimeout(timer); resolve(); } });
-    child.once('exit', () => { clearTimeout(timer); reject(new Error('Isolated startup failed: ' + logs)); });
-  });
+  // Der Probe-Port ist bis zum Serverstart wieder frei; schnappt ihn ein paralleler Test weg, mit neuem Port erneut starten.
+  for (let attempt = 1; ; attempt++) {
+    const probe = net.createServer(); await new Promise((resolve, reject) => { probe.once('error', reject); probe.listen(requestedPort, '127.0.0.1', resolve); });
+    port = probe.address().port; await new Promise((r) => probe.close(r));
+    base = `http://127.0.0.1:${port}`;
+    // Allowlist environment: never inherit production integration credentials/settings.
+    const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: process.env.TEMP, TMP: process.env.TMP,
+      PORT: String(port), HOST: '127.0.0.1', DATA_DIR: directory, ADMIN_PASSWORD: password,
+      ...(process.env.NODE_V8_COVERAGE ? { NODE_V8_COVERAGE: process.env.NODE_V8_COVERAGE } : {}),
+      ...testEnv }; // nur ausdrücklich vom Test gesetzte Werte, z. B. lokale Discord-Attrappen
+    const current = child = spawn(process.execPath, ['server.js'], { cwd: path.resolve(__dirname, '..'), env, stdio: ['ignore', 'pipe', 'pipe'] });
+    logs = '';
+    const collect = (b) => { if (current === child) logs += b; };
+    current.stdout.on('data', collect); current.stderr.on('data', collect);
+    try {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Isolated startup timeout')), 8000);
+        current.stdout.on('data', () => { if (logs.includes('LAN-System läuft')) { clearTimeout(timer); resolve(); } });
+        current.once('exit', () => { clearTimeout(timer); reject(new Error('Isolated startup failed: ' + logs)); });
+      });
+      break;
+    } catch (error) {
+      if (requestedPort || attempt >= 3 || !logs.includes('EADDRINUSE')) throw error;
+    }
+  }
   async function request(url, { method = 'GET', body, raw, user, admin, headers = {} } = {}) {
     const r = await fetch(base + url, { method, headers: { 'X-Event': 'first', ...(body !== undefined || raw !== undefined ? { 'Content-Type': 'application/json' } : {}),
       ...(user ? { Cookie: `lan_user=${tokens[user]}` } : {}), ...(admin ? { Cookie: adminCookie } : {}), ...headers },
