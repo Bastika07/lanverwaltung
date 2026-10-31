@@ -20,7 +20,7 @@ Es braucht keine npm-Installation, nur Node.js (ab Version 22.16). Der Markdown-
 
 **Markdown:** Infos, Eventdetails, Programmhinweise, Ticket-/Catering-/Gastserver-Beschreibungen und Website-Texte unterstützen Formatierungen mit Hilfe und Live-Vorschau. Beispiele: [docs/markdown.md](docs/markdown.md).
 
-**CI / Codeprüfung:** GitHub Actions führt Syntax-/JSON-Prüfungen, CodeQL, Unit-Tests, die vollständige `npm test`-Suite und isolierte Integrationstests aus. Lokale Befehle und Testaufteilung: [docs/continuous-integration.md](docs/continuous-integration.md).
+**CI / Codeprüfung:** GitHub Actions führt Syntax-/JSON-Prüfungen, CodeQL-SAST mit erweiterten Sicherheitsregeln, aktive ZAP-DAST-Scans gegen isolierte synthetische Testinstanzen, Unit-Tests, die vollständige `npm test`-Suite und isolierte Integrationstests aus. DAST-Befunde ab „Mittel“ lassen den Job fehlschlagen. Umfang, Grenzen und lokale Befehle: [docs/continuous-integration.md](docs/continuous-integration.md).
 
 ## Events
 

@@ -5,7 +5,8 @@ GitHub Actions prüft Pushes auf `main`, Pull Requests gegen `main` und manuelle
 | Workflow | Prüfung | Laufzeit |
 | --- | --- | --- |
 | Code checks | JavaScript-Syntax aller eigenen JS/CJS/MJS-Dateien und Projekt-JSON; actionlint für Workflows | Node 22/24 auf Ubuntu |
-| CodeQL Advanced | Sicherheitsanalyse für JavaScript/TypeScript und das Python-Hilfsskript | Ubuntu, ohne Build |
+| CodeQL Advanced | SAST mit `security-extended` für JavaScript/TypeScript und das Python-Hilfsskript | Ubuntu, ohne Build; zusätzlich wöchentlich |
+| DAST | Aktiver ZAP-API-Scan, anonym und als synthetischer Käufer; Gate ab Schweregrad Mittel | Ubuntu/Docker; zusätzlich wöchentlich |
 | Unit tests | Rendering/Markdown, Datenschutzlogik, Website-Modul mit Testkontext und CI-Testauswahl | Node 22/24 auf Ubuntu und Windows |
 | npm tests (full suite) | Unveränderte vollständige `npm test`-Testsuite | Node 22/24 auf Ubuntu |
 | Integration tests | Echter HTTP-Server, SQLite/Dateisystem, Migrationen, Parallelität, Catering und Sicherheits-/Proxy-Grenzen | Node 22/24 auf Ubuntu |
@@ -27,6 +28,18 @@ Es sind keine npm-Pakete installiert und keine npm-Abhängigkeiten deklariert. D
 Drittanbieter-Actions sind auf vollständige Commit-SHAs fixiert. Workflows haben standardmäßig nur `contents: read`; ausschließlich der CodeQL-Job darf Sicherheitsanalysen hochladen. Es werden keine Repository-Secrets und kein `pull_request_target` verwendet. Gleiche Workflow-Läufe eines Branches/PRs lösen veraltete Läufe ab; Jobs haben Zeitlimits.
 
 CodeQL meldet Befunde im Security-/Code-Scanning-Bereich. Die [Triage der sechs bestehenden Hinweise](codeql-triage.md) dokumentiert Einordnung und offene Folgearbeiten. Ein erfolgreicher Analyselauf bedeutet nicht automatisch, dass es keine Befunde gibt. Verpflichtende Checks und Schweregrad-Grenzen müssen bei Bedarf zusätzlich über Repository-Rulesets konfiguriert werden; diese Einstellungen werden von den Workflows nicht verändert.
+
+## SAST und DAST
+
+SAST läuft im bestehenden CodeQL-Workflow mit `security-extended`. Ergebnisse stehen unter **Security → Code scanning**. CodeQL macht den Job nicht allein wegen eines Fundes rot: Für eine verbindliche Merge-Sperre müssen Code-Scanning-Regeln und erforderliche Statuschecks im Repository-Ruleset aktiviert werden.
+
+`DAST` läuft bei Pushes auf `main`, Pull Requests gegen `main`, montags und manuell. Der Workflow baut das Laufzeitimage und verwendet einen separaten `git archive`-Export ohne Arbeitskopie, `.git`, `.env` oder Datenverzeichnis. `ops/assessment-zap.sh` startet je Rolle eine neue synthetische Instanz mit zufälligen Test-Sitzungen. Das Ziel hat `--network none`, keine Portfreigabe und nur temporäre Daten; ZAP teilt dessen Netzwerknamespace. Beide Container haben CPU-/Speicher-/Prozesslimits, keine Linux-Capabilities und keine Möglichkeit zur Privilegienerhöhung. Der Scanner erhält keinen Docker-Socket. Images werden vor dem Lauf aus der Registry geladen; die aktiven Scans haben keinen externen Netzwerkzugang. Keine frei konfigurierbare Ziel-URL, keine Produktions-Secrets und keine echten Discord-/DMX-Aufrufe.
+
+`ops/check-dast.cjs` lehnt Befunde ab **Mittel**, Scannerfehler, fehlende/ungültige Berichte, fehlende Rollenprüfungen und unvollständige aktive Scans ab. Niedrige und informative Befunde bleiben zur Bewertung sichtbar. ZAP-Exitcode 2 allein ist kein Fehler; zusätzlich werden JSON-Befunde und Coverage geprüft. Es gibt keine pauschalen Befund-Ausnahmen. Das Gate wird mit synthetischen Berichten auf Erfolg und Fehlerfälle getestet.
+
+JSON-/HTML-Berichte, Coverage und Protokolle bleiben auch nach Fehlern sieben Tage als Actions-Artefakte erhalten. Sie enthalten Testdaten, können aber technische Schwachstellendetails offenlegen: nicht ungeprüft weitergeben und die Sichtbarkeit der Actions-Artefakte beachten.
+
+**Grenzen:** Das vorhandene OpenAPI-Subset umfasst sechs API-Pfade und die Rollen anonym/Käufer. Kein vollständiger Browser-/SPA-Crawl, kein Admin-Scan, kein echter OAuth-End-to-End-Test und keine Prüfung von Produktions-TLS, Proxy oder externen Diensten. Transportfehler einzelner Probeanfragen und HTTP-Statusverteilung stehen im Coverage-Bericht und benötigen separate Bewertung. Ein grüner Scan ersetzt weder die HTTP-Berechtigungstests noch eine vollständige Sicherheitsprüfung. Der Workflow verändert keine Rulesets und führt kein Deployment aus. Den digest-fixierten ZAP-Scanner in `ops/assessment-zap.sh` regelmäßig bewusst aktualisieren.
 
 ## Dependency-Updates
 
