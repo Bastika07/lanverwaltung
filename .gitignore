@@ -7,3 +7,4 @@ image-vulnerabilities*.json
 *.sqlite-wal
 *.sqlite-shm
 *.sqlite-journal
+.env.lan
