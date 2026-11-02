@@ -157,6 +157,7 @@ label { display: block; font-weight: 600; margin-bottom: 4px; font-size: .9rem; 
   position: absolute; background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
   overflow: hidden; font-size: .92rem;
 }
+.match-maps { position: absolute; padding: 0 10px; font-size: .75rem; line-height: 16px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .match.clickable { cursor: pointer; }
 .match.clickable:hover { border-color: var(--accent); }
 .match.ready { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }

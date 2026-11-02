@@ -471,8 +471,9 @@ const tournamentApi = {
     save(); broadcast('tournament', t.id);
   },
   // Ergebnis aus TMT2 (lib/tmt.js): nur für ein offenes Spiel mit unveränderter Paarung, nie als Korrektur.
+  // maps: gespielte Maps mit Rundenstand ({ name, a, b }), wird zur Anzeige am Ergebnis gespeichert.
   // Gibt null zurück oder einen Hinweis, warum nichts eingetragen wurde.
-  reportResult(t, matchId, a, b, pa, pb) {
+  reportResult(t, matchId, a, b, pa, pb, maps) {
     if (t.status !== 'running') return 'Turnier läuft nicht – Ergebnis bitte von Hand eintragen';
     const view = Bracket.compute(t);
     const m = view.matches.find((x) => x.id === matchId);
@@ -481,7 +482,9 @@ const tournamentApi = {
     if (m.status !== 'ready' || m.a !== pa || m.b !== pb) return 'Die Paarung hat sich geändert – Ergebnis bitte von Hand eintragen';
     if (!Number.isInteger(a) || !Number.isInteger(b) || (t.type !== 'rr' && a === b)) return 'Kein eindeutiger Sieger – Ergebnis bitte von Hand eintragen';
     const wasFinished = isFinished(t);
-    t.results[m.id] = { a, b, pa: m.a, pb: m.b, at: new Date().toISOString() };
+    const played = (Array.isArray(maps) ? maps : []).slice(0, 9).map((x) => ({ name: str(x.name, 60), a: x.a, b: x.b }))
+      .filter((x) => [x.a, x.b].every((n) => Number.isInteger(n) && n >= 0 && n <= 999));
+    t.results[m.id] = { a, b, pa: m.a, pb: m.b, at: new Date().toISOString(), ...(played.length ? { maps: played } : {}) };
     pruneStale(t);
     discordAfterResult(t, wasFinished);
     announceResult(t, view, m.id, false);

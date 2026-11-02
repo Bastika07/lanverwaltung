@@ -91,7 +91,20 @@ test('CS2/TMT2: stopping, crash recovery, TMT2 errors and validation', async (t)
   await agent.cycle();
   let m = (await admin(app)).matches.find((x) => x.id === busy.data.id);
   assert.equal(m.state, 'ERROR');
-  assert.match(m.note, /TMT2: 400: no free game server/);
+  assert.match(m.note, /TMT2: 400: invalid <b>map pool/);
+
+  // Kein freier Gameserver (TMT2 antwortet mit 500 und reinem Text): das Match wartet und wird erneut angelegt
+  tmt.state.noServer = true;
+  const waiting = await create({ teamA: 'Wartend', teamB: 'Bravo' });
+  await agent.cycle();
+  await agent.cycle();
+  m = (await admin(app)).matches.find((x) => x.id === waiting.data.id);
+  assert.deepEqual([m.state, m.note], ['PENDING', 'Wartet auf einen freien Gameserver in TMT2']);
+  tmt.state.noServer = false;
+  await agent.cycle();
+  m = (await admin(app)).matches.find((x) => x.id === waiting.data.id);
+  assert.equal(m.state, 'ELECTION', 'sobald ein Server frei ist, wird das Match angelegt');
+  assert.equal(tmt.calls.filter((x) => x.method === 'POST' && x.body.teamA.name === 'Wartend').length, 3);
 
   // Absturz zwischen Anlegen und Melden: das schon vorhandene TMT2-Match wird wiederverwendet
   const free = await create({ teamA: 'Alpha', teamB: 'Bravo', format: 'bo1' });

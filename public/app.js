@@ -353,8 +353,11 @@ function matchBox(t, m, x, y) {
     return `<div class="${c.join(' ')}"><span class="name" title="${esc(label)}">${esc(label)}</span>
       <span class="score">${m.score ? m.score[side] : ''}</span></div>`;
   };
-  return `<div class="${cls.join(' ')}" data-match="${m.id}" style="left:${x}px;top:${y - BOX_H / 2}px;width:${COL_W}px;height:${BOX_H}px">
-    ${slot(m.a, 'a', m.hintA)}${slot(m.b, 'b', m.hintB)}</div>`;
+  // Rundenstände je Map (CS2 über TMT2) als Tooltip und unter dem Spiel
+  const maps = m.status === 'done' && Array.isArray(m.maps) ? m.maps.map((p) => `${p.name.replace(/^de_/, '')} ${p.a}:${p.b}`).join(' · ') : '';
+  return `<div class="${cls.join(' ')}" data-match="${m.id}" style="left:${x}px;top:${y - BOX_H / 2}px;width:${COL_W}px;height:${BOX_H}px"${maps ? ` title="${esc(maps)}"` : ''}>
+    ${slot(m.a, 'a', m.hintA)}${slot(m.b, 'b', m.hintB)}</div>${maps
+    ? `<div class="match-maps" style="left:${x}px;top:${y + BOX_H / 2 + 2}px;width:${COL_W}px" title="${esc(maps)}">${esc(maps)}</div>` : ''}`;
 }
 
 // Zeichnet einen Baum. centerY(r, i) liefert die vertikale Mitte, feeds(r, i) die Vorgänger-Spiele.
