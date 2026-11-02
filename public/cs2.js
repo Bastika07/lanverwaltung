@@ -34,7 +34,8 @@ adminViews.cs2 = {
           <p class="error" id="cs2Error"></p>
           <button class="primary" type="submit" ${d.configured ? '' : 'disabled'}>In TMT2 anlegen</button>
           <p class="hint">Der LAN-Client legt das Match in TMT2 an; TMT2 nimmt einen freien Server aus seiner Gameserver-Verwaltung. Die Spieler wählen ingame mit <code>.team a</code> bzw. <code>.team b</code> ihr Team und bannen und picken die Maps.
-            Der Client meldet den Stand alle paar Sekunden; das Endergebnis kommt automatisch in den Turnierbaum.</p>
+            Der Client meldet den Stand alle paar Sekunden; das Endergebnis kommt automatisch in den Turnierbaum.
+            Turniere mit „CS2-Matches automatisch in TMT2 anlegen“ erscheinen hier nicht: Ihre Paarungen legt die LAN-Verwaltung selbst an.</p>
           ${d.publicUrl ? `<p><a class="btn" href="${esc(d.publicUrl)}" target="_blank" rel="noopener">TMT2 öffnen ↗</a></p>` : ''}
         </form>
         <form id="cs2Pool" class="card"><h2>Mappool</h2>
@@ -47,7 +48,7 @@ adminViews.cs2 = {
       <div class="card"><h2>Matches (${d.matches.length})</h2>
         ${d.matches.length ? `<div style="overflow-x:auto"><table class="admin-list"><tbody>${d.matches.map((m) => `<tr class="${m.state === 'STOPPED' ? 'past' : ''}">
           <td><strong>${esc(m.teamA)}</strong> vs <strong>${esc(m.teamB)}</strong>
-            <div class="meta">${m.tournament ? `${esc(m.tournament.name)} · ${esc(m.label)} · ` : ''}${esc(m.format.toUpperCase())}</div></td>
+            <div class="meta">${m.tournament ? `${esc(m.tournament.name)} · ${esc(m.label)} · ` : ''}${esc(m.format.toUpperCase())}${m.auto ? ' · automatisch' : ''}</div></td>
           <td>${cs2Maps(m)}<div class="meta">Maps ${m.wonA}:${m.wonB}</div></td>
           <td><span class="badge">${esc(CS2_STATES[m.state] || m.state)}</span>
             ${m.reported ? '<div class="meta">✅ im Turnier eingetragen</div>' : ''}${m.note ? `<div class="meta"><strong>${esc(m.note)}</strong></div>` : ''}</td>
