@@ -66,6 +66,17 @@ Im Admin-Bereich unter **CS2-Matches** steht dann „LAN-Client: 🟢 verbunden�
 3. Mapwahl aus dem Mappool des Events: BO1 bannt abwechselnd bis auf eine Map. BO3 und BO5 bannen zuerst zwei Maps, dann picken die Teams abwechselnd, und der Gegner wählt die Seite. Die übrigen Maps werden gebannt, die letzte ist die Entscheidungsmap mit Messerrunde.
 4. Der Client meldet den Stand alle paar Sekunden. Nach Matchende wird das Ergebnis einmalig in den Turnierbaum eingetragen und wie ein normales Ergebnis angesagt.
 
+### CS2-Turnier automatisch abgleichen
+
+Statt jede Paarung einzeln anzulegen, lässt sich ein ganzes Turnier mit TMT2 verbinden: Im Turnierformular (Anlegen oder Bearbeiten) **„🔫 CS2-Matches automatisch in TMT2 anlegen“** anhaken und das Format wählen, getrennt für alle Spiele und für das Finale (z. B. BO1, Finale BO3). Der Schalter erscheint nur, wenn das Modul im Event eingeschaltet ist.
+
+- Sobald das Turnier läuft, bekommt **jede spielbereite Paarung genau ein Match**, spätestens beim nächsten Abruf des LAN-Clients. Ist ein Spiel fertig, folgt das nächste automatisch. Ergebnisse kommen wie oben in den Turnierbaum.
+- **Keine Doppelten:** Maßgeblich sind die gespeicherten Matches, auch nach einem Neustart. Ein Match in jedem Zustand (auch „Fehler“ oder „abgebrochen“) zählt. Für einen neuen Versuch das Match entfernen, dann legt die LAN-Verwaltung es neu an.
+- **Korrekturen:** Ändert eine Ergebniskorrektur, ein von Hand eingetragenes Ergebnis, das Zurücksetzen oder Löschen des Turniers eine Paarung, verschwindet das offene automatische Match dazu und wird in TMT2 beendet. Für die neue Paarung entsteht ein neues Match. Beendete Matches und übernommene Ergebnisse bleiben.
+- **Abschalten** des Schalters legt keine neuen Matches mehr an; laufende Matches laufen weiter.
+- Reicht der Mappool für das Format nicht (z. B. BO3 mit zwei Maps), steht das Match auf „Fehler“. Mappool erweitern und das Match entfernen.
+- Diese Turniere fehlen in der Auswahl „Neues Match“ auf der Seite CS2-Matches; ihre Matches sind dort mit „automatisch“ markiert.
+
 Es wird **nichts überschrieben**: Hat die Paarung inzwischen ein Ergebnis, hat sie sich geändert, läuft das Turnier nicht mehr oder gibt es keinen eindeutigen Sieger, steht ein Hinweis am Match. Dann trägt die Turnierleitung das Ergebnis von Hand ein. Kann TMT2 das Match nicht anlegen (z. B. kein freier Gameserver), steht es auf „Fehler“ mit der Meldung von TMT2. Dann entfernen und neu anlegen. Entfernen beendet ein laufendes Match beim nächsten Abruf in TMT2. Ein schon übernommenes Ergebnis bleibt im Turnier.
 
 Ist die Verbindung gestört, versucht der Client es mit wachsender Pause erneut (bis 60 s). Hat er ein Match angelegt, die Rückmeldung aber nicht mehr geschafft, findet er es beim nächsten Durchlauf über die Match-ID wieder und legt es kein zweites Mal an.

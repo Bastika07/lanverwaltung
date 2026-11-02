@@ -12,6 +12,7 @@ const Dmx = require('./lib/dmx.js');
 const Security = require('./lib/security.js');
 const Access = require('./lib/access.js');
 const Storage = require('./lib/storage.js');
+const Tmt = require('./lib/tmt.js');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -255,6 +256,14 @@ function cleanParticipants(list) {
 
 function cleanType(v) { return ['ko', 'de', 'rr'].includes(v) ? v : 'ko'; }
 function cleanTeamSize(v) { const n = Math.floor(Number(v)); return n >= 1 && n <= 20 ? n : 1; }
+// CS2-Turnier mit TMT2 abgleichen (lib/tmt.js): null = aus, sonst Format für alle Spiele und für das Finale
+function cleanCs2(v) {
+  if (!v) return null;
+  if (typeof v !== 'object' || Array.isArray(v)) throw new HttpError(400, 'Ungültige CS2-Einstellung');
+  const ok = (f) => Object.hasOwn(Tmt.FORMATS, f);
+  if (!ok(v.format) || (v.finalFormat != null && v.finalFormat !== '' && !ok(v.finalFormat))) throw new HttpError(400, 'Unbekanntes CS2-Format');
+  return { format: v.format, finalFormat: ok(v.finalFormat) ? v.finalFormat : v.format };
+}
 
 function str(v, max = 100) {
   if (v !== null && typeof v === 'object') throw new HttpError(400, 'Textwert erwartet');
@@ -656,6 +665,7 @@ async function api(req, res, url) {
         gfReset: body.gfReset !== false,
         discordEnabled: body.discordEnabled !== false,
         teamSize: cleanTeamSize(body.teamSize),
+        cs2: cleanCs2(body.cs2),
         signup: !!body.signup, // Anmeldung über Discord offen (solange Entwurf)
         members: {},
         participants: cleanParticipants(body.participants || []),
@@ -703,6 +713,7 @@ async function api(req, res, url) {
       const name = body.name !== undefined ? str(body.name) : undefined;
       if (name === '') throw new HttpError(400, 'Name fehlt');
       const game = body.game !== undefined ? str(body.game) : undefined;
+      const cs2 = body.cs2 !== undefined ? cleanCs2(body.cs2) : undefined;
       if (name !== undefined) t.name = name;
       if (game !== undefined) t.game = game;
       const renames = Object.create(null); // für Discord: Kanäle umbenennen statt neu anlegen (Namen als reine Daten)
@@ -715,6 +726,7 @@ async function api(req, res, url) {
         Access.bindPlayers(db, t, true, chosen);
       }
       if (body.discordEnabled !== undefined) t.discordEnabled = !!body.discordEnabled;
+      if (cs2 !== undefined) t.cs2 = cs2;
       if (body.signup !== undefined) t.signup = !!body.signup;
       if (body.teamSize !== undefined && t.status === 'draft') t.teamSize = cleanTeamSize(body.teamSize);
       if (t.status === 'draft') {
@@ -767,7 +779,7 @@ async function api(req, res, url) {
       name: (t.name + ' (Kopie)').slice(0, 100),
       game: t.game, type: t.type, thirdPlace: t.thirdPlace, gfReset: t.gfReset,
       discordEnabled: t.discordEnabled !== false,
-      teamSize: t.teamSize || 1, signup: false,
+      teamSize: t.teamSize || 1, signup: false, cs2: t.cs2 ? { ...t.cs2 } : null,
       members: JSON.parse(JSON.stringify(t.members || {})),
       participants: t.participants.slice(), playerIds: { ...(t.playerIds || {}) },
       order: [], results: {}, status: 'draft',

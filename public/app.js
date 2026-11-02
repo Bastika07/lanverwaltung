@@ -652,6 +652,7 @@ function tournamentForm(t, isNew) {
       <p class="hint" id="partCount"></p>
       ${locked ? '<p class="hint">Turnier läuft: Teilnehmer können nur umbenannt werden (Anzahl und Reihenfolge bleiben gleich).</p>' : ''}
     </div>
+    ${on('cs2') ? cs2Field(t) : ''}
     ${state.discord && !locked ? `<div class="field"><label class="check"><input type="checkbox" id="fSignup" ${t.signup ? 'checked' : ''}> Anmeldung über Discord offen</label>
       <p class="hint">Solange das Turnier ein Entwurf ist, melden sich Spieler selbst an: <code>/anmelden</code> bzw. bei Teams <code>/team gruenden</code> und <code>/team beitreten</code>.</p></div>` : ''}
     ${state.discord ? `<div class="field"><label class="check"><input type="checkbox" id="fDiscord" ${t.discordEnabled !== false ? 'checked' : ''}> Discord-Voice-Kanäle anlegen</label>
@@ -659,6 +660,17 @@ function tournamentForm(t, isNew) {
     <p class="error" id="fError"></p>
     <button type="submit" class="primary">${isNew ? 'Turnier anlegen' : 'Speichern'}</button>
   </form>`;
+}
+
+// CS2-Turnier: spielbereite Paarungen automatisch als Match in TMT2 anlegen (Modul CS2-Matches)
+function cs2Field(t) {
+  const c = t.cs2 || { format: 'bo1', finalFormat: 'bo3' };
+  const opts = (sel) => [['bo1', 'Best of 1'], ['bo3', 'Best of 3'], ['bo5', 'Best of 5']].map(([k, l]) => `<option value="${k}" ${sel === k ? 'selected' : ''}>${l}</option>`).join('');
+  return `<div class="field"><label class="check"><input type="checkbox" id="fCs2" ${t.cs2 ? 'checked' : ''}> 🔫 CS2-Matches automatisch in TMT2 anlegen</label>
+    <div class="row" id="fCs2Formats" ${t.cs2 ? '' : 'hidden'}>
+      <label>Format <select id="fCs2Format">${opts(c.format)}</select></label>
+      <label>Finale <select id="fCs2Final">${opts(c.finalFormat || c.format)}</select></label></div>
+    <p class="hint">Sobald das Turnier läuft, bekommt jede spielbereite Paarung ein Match in TMT2; das Ergebnis kommt automatisch zurück. Siehe Admin → CS2-Matches.</p></div>`;
 }
 
 // Personenbindung im Formular: bestehende (nur Anzeige) und in dieser Sitzung aus der Teilnehmerliste gewählte.
@@ -676,6 +688,8 @@ function readForm() {
     gfReset: document.getElementById('fReset').checked,
     participants,
     playerIds: Object.fromEntries(participants.filter((n) => formPicked.has(n)).map((n) => [n, formPicked.get(n)])),
+    ...(document.getElementById('fCs2') ? { cs2: document.getElementById('fCs2').checked
+      ? { format: document.getElementById('fCs2Format').value, finalFormat: document.getElementById('fCs2Final').value } : null } : {}),
     ...(document.getElementById('fDiscord') ? { discordEnabled: document.getElementById('fDiscord').checked } : {}),
     ...(document.getElementById('fSignup') ? { signup: document.getElementById('fSignup').checked } : {}),
     ...(!document.getElementById('fTeam').disabled ? { teamSize: Number(document.getElementById('fTeam').value) } : {}),
@@ -722,6 +736,8 @@ function bindTournamentForm(t) {
       + (document.getElementById('fType').value === 'rr' && n % 2 === 1 ? ' · ungerade Anzahl: pro Spieltag hat einer spielfrei' : '');
   };
   part.addEventListener('input', count);
+  const cs2 = document.getElementById('fCs2');
+  if (cs2) cs2.addEventListener('change', () => { document.getElementById('fCs2Formats').hidden = !cs2.checked; });
   document.getElementById('fType').addEventListener('change', (e) => {
     document.getElementById('thirdField').hidden = e.target.value !== 'ko';
     document.getElementById('resetField').hidden = e.target.value !== 'de';
