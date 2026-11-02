@@ -4,6 +4,8 @@
 // führt sie an TMT2 aus und meldet den Stand der offenen Matches zurück. Verbindungen gehen nur vom LAN nach
 // außen; im LAN muss kein Port geöffnet werden. Nur Node-Bordmittel.
 // Start: LAN_URL=https://lan.example.org TMT2_AGENT_TOKEN=… TMT2_URL=http://tmt2:8080 TMT2_TOKEN=… node agent/tmt2-agent.js
+// Optional LAN_STATUS_FILE: JSON vom Gameserver-Host ({ ampUrl, tmt2Url, servers: [{ name, address, running }] }),
+// wird mit der Belegung aus TMT2 an die LAN-Verwaltung gemeldet (Admin-Seite CS2-Matches).
 
 const fs = require('fs');
 
@@ -22,14 +24,14 @@ function config(env = process.env) {
     throw new Error('LAN_URL muss mit https:// beginnen (http nur für localhost oder mit ALLOW_HTTP=1)');
   }
   if (!/^https?:$/.test(new URL(c.tmtUrl).protocol)) throw new Error('TMT2_URL muss mit http:// oder https:// beginnen');
-  return c;
+  return { ...c, statusFile: env.LAN_STATUS_FILE || '' };
 }
 
 class RemoteError extends Error {
   constructor(message, status) { super(message); this.status = status; }
 }
 
-function createAgent({ lanUrl, agentToken, tmtUrl, tmtToken, log = console }) {
+function createAgent({ lanUrl, agentToken, tmtUrl, tmtToken, statusFile = '', log = console }) {
   async function call(base, token, method, pathname, body) {
     const r = await fetch(base + pathname, {
       method, redirect: 'error', signal: AbortSignal.timeout(10000),
@@ -68,6 +70,27 @@ function createAgent({ lanUrl, agentToken, tmtUrl, tmtToken, log = console }) {
   // Adresse des zugeteilten Gameservers für die Spieler (connect …) – ohne RCON-Passwort
   const server = (g) => (g && typeof g.ip === 'string' && Number.isInteger(g.port) ? { ip: g.ip.slice(0, 100), port: g.port } : null);
 
+  // Gameserver für die Admin-Seite: Statusdatei des Hosts (Namen, läuft) plus Belegung aus TMT2 – ohne RCON-Passwörter
+  async function lanStatus() {
+    let file = {};
+    if (statusFile) {
+      try { file = JSON.parse(fs.readFileSync(statusFile, 'utf8')) || {}; } catch { file = {}; } // fehlt oder wird gerade geschrieben
+    }
+    const text = (v, n) => (typeof v === 'string' ? v.slice(0, n) : null);
+    const servers = new Map(list(file.servers).slice(0, 30).filter((x) => x && typeof x.address === 'string')
+      .map((x) => [x.address.slice(0, 120), { name: text(x.name, 60), address: x.address.slice(0, 120), running: x.running === true, tmt2: null }]));
+    try {
+      for (const g of list(await tmt('GET', '/api/gameservers')).slice(0, 30)) {
+        if (!g || typeof g.ip !== 'string' || !Number.isInteger(g.port)) continue;
+        const address = `${g.ip.slice(0, 100)}:${g.port}`;
+        const entry = servers.get(address) || { name: null, address, running: null, tmt2: null };
+        entry.tmt2 = { enabled: g.canBeUsed !== false, used: text(g.usedBy, 64) };
+        servers.set(address, entry);
+      }
+    } catch (err) { if (!(err instanceof RemoteError)) throw err; }
+    return { ampUrl: text(file.ampUrl, 200), tmt2Url: text(file.tmt2Url, 200), servers: [...servers.values()] };
+  }
+
   // Ein Durchlauf: Aufträge holen, an TMT2 ausführen, Ergebnis melden. Gibt die gewünschte Pause in Sekunden zurück.
   async function cycle() {
     const jobs = await lan('GET', '/api/cs2/agent/poll') || {};
@@ -100,6 +123,7 @@ function createAgent({ lanUrl, agentToken, tmtUrl, tmtToken, log = console }) {
         else log.error(`TMT2-Match ${w.tmtId} abfragen: ${err.message}`);
       }
     }
+    out.lan = await lanStatus();
     await lan('POST', '/api/cs2/agent/report', out);
     const n = Number(jobs.pollSeconds);
     return Number.isFinite(n) ? Math.min(Math.max(n, 2), 60) : 5;

@@ -52,12 +52,27 @@ Im Admin-Bereich unter **CS2-Matches** steht dann „LAN-Client: 🟢 verbunden�
 | Variable | Wo | Bedeutung |
 |---|---|---|
 | `TMT2_AGENT_TOKEN` / `_FILE` | beide | Gemeinsames Token des LAN-Clients, mindestens 32 Zeichen |
-| `TMT2_PUBLIC_URL` | LAN-Verwaltung | Optional: Link zur TMT2-Oberfläche im LAN, z. B. `http://192.168.1.10:8080` (funktioniert nur vor Ort) |
+| `TMT2_PUBLIC_URL` | LAN-Verwaltung | Optional: fester Link zur TMT2-Oberfläche im LAN, z. B. `http://192.168.1.10:8080` (funktioniert nur vor Ort). Ohne ihn gilt die Adresse aus der Statusdatei |
+| `AMP_PUBLIC_URL` | LAN-Verwaltung | Optional: fester Link zum AMP-Panel, z. B. `http://192.168.1.10:8080`. Ohne ihn gilt die Adresse aus der Statusdatei |
+| `LAN_STATUS_FILE` | LAN-Client | Optional: Statusdatei des Gameserver-Hosts (siehe „Gameserver und AMP“) |
 | `LAN_URL` | LAN-Client | Adresse der LAN-Verwaltung, nur `https://` (http nur für `localhost` oder mit `ALLOW_HTTP=1`) |
 | `TMT2_TOKEN` / `_FILE` | LAN-Client | Globales TMT2-Token. Bleibt im LAN |
 | `TMT2_URL` | LAN-Client | Adresse von TMT2, im Stack `http://tmt2:8080` |
 | `TMT2_BIND_ADDRESS`, `TMT2_PORT` | LAN | Wo TMT2 lauscht. Die CS2-Server müssen TMT2 für ihre Logs erreichen |
 | `TMT2_LOG_ADDRESS` | LAN | Adresse von TMT2 aus Sicht der CS2-Server |
+
+## Gameserver und AMP
+
+Unter **CS2-Matches** zeigt die Karte **Gameserver** alle Server mit Name, `connect`-Adresse, Zustand (läuft/aus) und Belegung in TMT2 (frei, belegt mit Paarung, gesperrt, nicht in TMT2). Daneben stehen die Links **TMT2 öffnen ↗** und **AMP öffnen ↗**.
+
+Die Belegung fragt der LAN-Client bei TMT2 ab. Namen, Zustand und die Adressen von AMP und TMT2 liest er aus einer optionalen JSON-Datei (`LAN_STATUS_FILE`), die der Gameserver-Host schreibt, z. B. ein Skript neben AMP:
+
+```json
+{ "ampUrl": "http://192.168.1.10:8080", "tmt2Url": "http://192.168.1.10:8088",
+  "servers": [{ "name": "Warserver#1", "address": "192.168.1.10:27015", "running": true }] }
+```
+
+Schreibt das Skript die aktuelle IP des Hosts hinein, folgen die Links nach einem Netzwechsel (z. B. auf der LAN-Party) von selbst. Feste Werte in `TMT2_PUBLIC_URL` bzw. `AMP_PUBLIC_URL` haben Vorrang. Den Stand hält die LAN-Verwaltung nur im Speicher. Nach einem Neustart erscheint er mit der nächsten Meldung des Clients wieder, nach wenigen Sekunden.
 
 ## Ablauf
 
@@ -87,5 +102,6 @@ Ist die Verbindung gestört, versucht der Client es mit wachsender Pause erneut 
 
 - Admin-Seite nur für die Orga, Rechteprüfung serverseitig. Der Client bekommt nur Aufträge aus Events, in denen das Modul eingeschaltet ist.
 - Der Client meldet sich mit `TMT2_AGENT_TOKEN` an (Vergleich per `timingSafeEqual`). Abgelehnte Anfragen landen als `cs2_agent_rejected` im `sec`-Log und sind in der Rate begrenzt. Das Token geht nur per HTTPS ins Internet.
-- Der Client gibt an TMT2 nur bekannte Felder weiter: Teams, Mappool, Mapwahl. `gameServer` ist immer `null`, RCON-Befehle und Webhooks gibt es nicht. Zurück an die LAN-Verwaltung gehen nur Status und Map-Stände, keine Passwörter, Spieler oder Logs.
+- Der Client gibt an TMT2 nur bekannte Felder weiter: Teams, Mappool, Mapwahl. `gameServer` ist immer `null`, RCON-Befehle und Webhooks gibt es nicht. Zurück an die LAN-Verwaltung gehen nur Status, Map-Stände und die Gameserver-Liste (Name, Adresse, läuft, Belegung), keine Passwörter, Spieler oder Logs.
+- Gemeldete Links werden nur als `http(s)://Host[:Port]` ohne Zugangsdaten übernommen, Serveradressen nur als `Host:Port`. Alles andere wird verworfen.
 - TMT2 hat eine eigene Anmeldung. Ohne Token darf dort jeder eigene Matches anlegen. TMT2 deshalb **nur im LAN** erreichbar machen.

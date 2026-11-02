@@ -62,9 +62,10 @@ test('CS2/TMT2: the LAN client creates the match, reports progress and the resul
 
   // Beendete Matches werden nicht mehr beobachtet; spätere Änderungen in TMT2 überschreiben nichts
   live.matchMaps[2].score = { teamA: 0, teamB: 13 };
-  const before = tmt.calls.length;
+  const matchCalls = () => tmt.calls.filter((x) => x.url.startsWith('/api/matches')).length; // Gameserver-Liste fragt der Client immer ab
+  const before = matchCalls();
   await agent.cycle();
-  assert.equal(tmt.calls.length, before);
+  assert.equal(matchCalls(), before);
   assert.deepEqual(await results(), [[2, 1, 0, 1]]);
 
   assert.doesNotMatch(JSON.stringify(await admin(app)) + JSON.stringify(app.snapshot()), new RegExp(`${AGENT_TOKEN}|${TMT_TOKEN}`), 'no token is shown or stored');
