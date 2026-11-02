@@ -4,7 +4,7 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 
 // New tests default to integration so they cannot be silently omitted from CI.
-const unitFiles = new Set(['ci.test.js', 'catering-render.test.js', 'markdown.test.js',
+const unitFiles = new Set(['ci.test.js', 'dockerfile-permissions.test.js', 'catering-render.test.js', 'markdown.test.js',
   'guest-server-markdown.test.js', 'privacy.test.js', 'render-security.test.js', 'tmt-election.test.js', 'website.test.js']);
 function selectTests(files, suite) {
   if (!['unit', 'integration'].includes(suite)) throw new Error(`Unknown test suite: ${suite}`);
