@@ -45,6 +45,7 @@ services:
       # Optional: CS2-Matches über TMT2. TMT2 und der LAN-Client laufen im LAN (docker-compose.lan.yml).
       TMT2_AGENT_TOKEN: ${TMT2_AGENT_TOKEN:-}
       TMT2_PUBLIC_URL: ${TMT2_PUBLIC_URL:-}
+      AMP_PUBLIC_URL: ${AMP_PUBLIC_URL:-}
     volumes:
       - turnierbaum-data:/data
     logging:

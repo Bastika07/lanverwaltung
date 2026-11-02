@@ -11,6 +11,13 @@ function cs2Maps(m) {
   return m.maps.map((x) => `<span class="nowrap">${esc(x.name || '?')} <strong>${x.a}:${x.b}</strong>${x.done ? '' : ' …'}</span>`).join(' · ');
 }
 
+function cs2Server(s) {
+  const run = s.running === true ? '🟢 läuft' : s.running === false ? '🔴 aus' : '';
+  const tmt2 = !s.tmt2 ? 'nicht in TMT2' : !s.tmt2.enabled ? 'in TMT2 gesperrt' : s.tmt2.used ? `belegt${s.match ? `: ${esc(s.match)}` : ''}` : 'frei';
+  return `<tr><td><strong>${esc(s.name || s.address)}</strong>${s.name ? `<div class="meta">connect ${esc(s.address)}</div>` : ''}</td>
+    <td>${run}</td><td><span class="badge${s.tmt2 && s.tmt2.used ? ' running' : ''}">${tmt2}</span></td></tr>`;
+}
+
 adminViews.cs2 = {
   label: 'CS2-Matches', module: 'cs2', order: 47, events: ['cs2', 'tournament'],
   async render() {
@@ -36,7 +43,8 @@ adminViews.cs2 = {
           <p class="hint">Der LAN-Client legt das Match in TMT2 an; TMT2 nimmt einen freien Server aus seiner Gameserver-Verwaltung. Die Spieler wählen ingame mit <code>.team a</code> bzw. <code>.team b</code> ihr Team und bannen und picken die Maps.
             Der Client meldet den Stand alle paar Sekunden; das Endergebnis kommt automatisch in den Turnierbaum.
             Turniere mit „CS2-Matches automatisch in TMT2 anlegen“ erscheinen hier nicht: Ihre Paarungen legt die LAN-Verwaltung selbst an.</p>
-          ${d.publicUrl ? `<p><a class="btn" href="${esc(d.publicUrl)}" target="_blank" rel="noopener">TMT2 öffnen ↗</a></p>` : ''}
+          ${d.publicUrl || d.ampUrl ? `<p class="row">${d.publicUrl ? `<a class="btn" href="${esc(d.publicUrl)}" target="_blank" rel="noopener">TMT2 öffnen ↗</a>` : ''}
+            ${d.ampUrl ? `<a class="btn" href="${esc(d.ampUrl)}" target="_blank" rel="noopener">AMP öffnen ↗</a>` : ''}</p>` : ''}
         </form>
         <form id="cs2Pool" class="card"><h2>Mappool</h2>
           <div class="field"><label for="cs2Maps">Eine Map pro Zeile</label><textarea id="cs2Maps" class="short" rows="8">${esc(d.mapPool.join('\n'))}</textarea>
@@ -45,6 +53,9 @@ adminViews.cs2 = {
           <button type="submit">Speichern</button>
         </form>
       </div>
+      ${d.servers.length ? `<div class="card"><h2>Gameserver <span class="meta">${d.agentOnline ? 'laut LAN-Client' : 'zuletzt gemeldet'}</span></h2>
+        <div style="overflow-x:auto"><table class="admin-list"><tbody>${d.servers.map(cs2Server).join('')}</tbody></table></div>
+        <p class="hint">Namen und Status kommen vom Gameserver-Host (AMP), die Belegung aus TMT2. Server ohne TMT2 (z. B. 4 All) nimmt TMT2 nicht für Matches.</p></div>` : ''}
       <div class="card"><h2>Matches (${d.matches.length})</h2>
         ${d.matches.length ? `<div style="overflow-x:auto"><table class="admin-list"><tbody>${d.matches.map((m) => `<tr class="${m.state === 'STOPPED' ? 'past' : ''}">
           <td><strong>${esc(m.teamA)}</strong> vs <strong>${esc(m.teamB)}</strong>

@@ -47,6 +47,8 @@ services:
       TMT2_AGENT_TOKEN: ${TMT2_AGENT_TOKEN:?TMT2_AGENT_TOKEN fehlt}
       TMT2_URL: http://tmt2:8080
       TMT2_TOKEN: ${TMT2_TOKEN:-}
+      # Optional: Statusdatei des Gameserver-Hosts (Namen, läuft, AMP-Link), z. B. per Volume eingebunden
+      LAN_STATUS_FILE: ${LAN_STATUS_FILE:-}
     logging:
       driver: json-file
       options:

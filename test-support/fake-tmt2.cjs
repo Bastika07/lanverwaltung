@@ -18,6 +18,7 @@ async function fakeTmt(t) {
       const reply = (status, value) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(value === undefined ? '' : JSON.stringify(value)); };
       if (req.headers.authorization !== `Bearer ${TMT_TOKEN}`) return reply(401, { message: 'unauthorized' });
       const id = decodeURIComponent(url.pathname.split('/')[3] || '');
+      if (req.method === 'GET' && url.pathname === '/api/gameservers') return reply(200, state.gameservers || []);
       if (req.method === 'GET' && url.pathname === '/api/matches') {
         const p = url.searchParams.getAll('passthrough');
         return reply(200, [...matches.values()].filter((m) => !p.length || p.includes(m.passthrough)));
