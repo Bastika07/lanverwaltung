@@ -40,7 +40,8 @@ function createAgent({ lanUrl, agentToken, tmtUrl, tmtToken, log = console }) {
     let value = null;
     try { value = text ? JSON.parse(text) : null; } catch { /* kein JSON */ }
     if (!r.ok) {
-      const msg = String((value && (value.message || value.error)) || '').replace(/\s+/g, ' ').slice(0, 200);
+      // TMT2 meldet Fehler teils als JSON, teils als reinen Text (z. B. „no free game server available“)
+      const msg = String((value && (value.message || value.error)) || (value === null && !/^\s*</.test(text) ? text : '')).replace(/\s+/g, ' ').slice(0, 200);
       throw new RemoteError(`${r.status}${msg ? `: ${msg}` : ''}`, r.status);
     }
     return value;

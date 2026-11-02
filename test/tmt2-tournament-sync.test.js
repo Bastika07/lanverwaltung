@@ -107,3 +107,35 @@ test('CS2-Turnier: zu kleiner Mappool wird als Fehler angezeigt, ausgeschaltetes
   await agentFor(off, tmt).cycle();
   assert.equal(posts(tmt).length, 0, 'ohne eingeschaltetes Modul kein Abgleich');
 });
+
+test('CS2-Turnier: Bo1 trägt den Rundenstand ein, Bo3 die gewonnenen Maps mit Rundenständen je Map', async (t) => {
+  const tmt = await fakeTmt(t);
+  const app = await start(t, withCup());
+  const agent = agentFor(app, tmt);
+  await agent.cycle();
+  const [first, second] = [...tmt.matches.values()];
+  finish(first, 13, 9);
+  finish(second, 7, 13);
+  await agent.cycle();
+  await agent.cycle(); // Finale anlegen
+  let tour = (await app.request('/api/tournaments/cup', { admin: true })).data;
+  const semis = Object.values(tour.results);
+  assert.deepEqual(semis.map((r) => [r.a, r.b, r.maps]).sort(), [[13, 9, [{ name: 'de_nuke', a: 13, b: 9 }]], [7, 13, [{ name: 'de_nuke', a: 7, b: 13 }]]].sort());
+
+  // Bo3-Finale: Team A gewinnt 2:1 Maps, obwohl Team B mehr Runden hat – maßgeblich sind die Maps
+  const final = [...tmt.matches.values()].find((m) => !m.isStopped && m.matchMaps.length === 0);
+  Object.assign(final, { state: 'FINISHED', matchMaps: [
+    { name: 'de_nuke', state: 'FINISHED', score: { teamA: 13, teamB: 11 } },
+    { name: 'de_mirage', state: 'FINISHED', score: { teamA: 0, teamB: 13 } },
+    { name: 'de_inferno', state: 'FINISHED', score: { teamA: 13, teamB: 11 } }] });
+  await agent.cycle();
+  tour = (await app.request('/api/tournaments/cup', { admin: true })).data;
+  const view = Bracket.compute(tour);
+  const fm = view.matches.find((m) => m.label === 'Finale');
+  assert.deepEqual([fm.score, fm.winner], [{ a: 2, b: 1 }, fm.a]);
+  assert.deepEqual(fm.maps.map((m) => `${m.name} ${m.a}:${m.b}`), ['de_nuke 13:11', 'de_mirage 0:13', 'de_inferno 13:11']);
+  assert.equal(view.finished, true, 'das Turnier ist entschieden');
+  // Öffentliche Ansicht zeigt die Rundenstände mit
+  const pub = (await app.request('/api/tournaments/cup')).data;
+  assert.ok(Object.values(pub.results).some((r) => Array.isArray(r.maps) && r.maps.length === 3));
+});

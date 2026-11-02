@@ -53,6 +53,7 @@
       const r = results[m.id];
       if (!r || r.pa !== m.a || r.pb !== m.b) return m;
       m.score = { a: r.a, b: r.b };
+      if (Array.isArray(r.maps)) m.maps = r.maps; // Rundenstände je Map (aus TMT2)
       m.status = 'done';
       if (r.a > r.b) { m.winner = m.a; m.loser = m.b; }
       else if (r.b > r.a) { m.winner = m.b; m.loser = m.a; }

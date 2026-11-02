@@ -7,6 +7,7 @@ const TMT_TOKEN = 'synthetic-tmt2-token';
 async function fakeTmt(t) {
   const calls = [];
   const matches = new Map();
+  const state = { noServer: false }; // true: wie TMT2 ohne freien Gameserver (500, reiner Text)
   const server = http.createServer((req, res) => {
     let raw = '';
     req.on('data', (c) => { raw += c; });
@@ -22,7 +23,8 @@ async function fakeTmt(t) {
         return reply(200, [...matches.values()].filter((m) => !p.length || p.includes(m.passthrough)));
       }
       if (req.method === 'POST' && url.pathname === '/api/matches') {
-        if (body.teamA.name === 'busy') return reply(400, { message: 'no free game server <b>available</b>' });
+        if (state.noServer) { res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end('no free game server available'); }
+        if (body.teamA.name === 'busy') return reply(400, { message: 'invalid <b>map pool</b>' });
         const m = { id: `tmt-${matches.size + 1}`, state: 'ELECTION', isStopped: false, matchMaps: [], rconPassword: 'SECRET_RCON', ...body };
         matches.set(m.id, m);
         return reply(201, m);
@@ -34,7 +36,7 @@ async function fakeTmt(t) {
   });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   t.after(() => new Promise((r) => server.close(r)));
-  return { calls, matches, url: `http://127.0.0.1:${server.address().port}` };
+  return { calls, matches, state, url: `http://127.0.0.1:${server.address().port}` };
 }
 
 module.exports = { fakeTmt, TMT_TOKEN };

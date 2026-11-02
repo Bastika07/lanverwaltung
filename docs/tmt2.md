@@ -26,7 +26,7 @@ CS2-Server ⇄ tmt2 ⇄ tmt2-agent ──HTTPS (nur ausgehend)──▶ LAN-Verw
 
 ## Abgrenzung zum eigenen Turniermodul
 
-Turnierbaum, Paarungen und Platzierungen bleiben im Modul **Turniere**. TMT2 spielt nur das einzelne Match auf dem Server. Die Brücke lässt für eine spielbereite Paarung ein Match in TMT2 anlegen und trägt das Endergebnis (gewonnene Maps, z. B. 2:1) in den Turnierbaum ein. Freie Matches ohne Turnier gehen auch, zum Beispiel für Showmatches.
+Turnierbaum, Paarungen und Platzierungen bleiben im Modul **Turniere**. TMT2 spielt nur das einzelne Match auf dem Server. Die Brücke lässt für eine spielbereite Paarung ein Match in TMT2 anlegen und trägt das Endergebnis in den Turnierbaum ein: bei BO1 den Rundenstand (z. B. 13:9), bei BO3/BO5 die gewonnenen Maps (z. B. 2:1). Die Rundenstände je Map stehen unter dem Spiel im Turnierbaum („dust2 13:9“). Eine Summe der Runden wäre bei mehreren Maps kein fairer Sieger, deshalb zählen dort die Maps. Freie Matches ohne Turnier gehen auch, zum Beispiel für Showmatches.
 
 ## Einrichten
 
@@ -77,7 +77,7 @@ Statt jede Paarung einzeln anzulegen, lässt sich ein ganzes Turnier mit TMT2 ve
 - Reicht der Mappool für das Format nicht (z. B. BO3 mit zwei Maps), steht das Match auf „Fehler“. Mappool erweitern und das Match entfernen.
 - Diese Turniere fehlen in der Auswahl „Neues Match“ auf der Seite CS2-Matches; ihre Matches sind dort mit „automatisch“ markiert.
 
-Es wird **nichts überschrieben**: Hat die Paarung inzwischen ein Ergebnis, hat sie sich geändert, läuft das Turnier nicht mehr oder gibt es keinen eindeutigen Sieger, steht ein Hinweis am Match. Dann trägt die Turnierleitung das Ergebnis von Hand ein. Kann TMT2 das Match nicht anlegen (z. B. kein freier Gameserver), steht es auf „Fehler“ mit der Meldung von TMT2. Dann entfernen und neu anlegen. Entfernen beendet ein laufendes Match beim nächsten Abruf in TMT2. Ein schon übernommenes Ergebnis bleibt im Turnier.
+Es wird **nichts überschrieben**: Hat die Paarung inzwischen ein Ergebnis, hat sie sich geändert, läuft das Turnier nicht mehr oder gibt es keinen eindeutigen Sieger, steht ein Hinweis am Match. Dann trägt die Turnierleitung das Ergebnis von Hand ein. Ist in TMT2 gerade kein Gameserver frei, wartet das Match („Wartet auf einen freien Gameserver in TMT2“) und wird beim nächsten Abruf erneut angelegt. TMT2 gibt einen Server erst etwa eine Minute nach Matchende frei, so startet z. B. das Finale kurz nach dem letzten Halbfinale von selbst. Lehnt TMT2 das Anlegen aus einem anderen Grund ab, steht das Match auf „Fehler“ mit der Meldung von TMT2. Dann entfernen und neu anlegen. Entfernen beendet ein laufendes Match beim nächsten Abruf in TMT2. Ein schon übernommenes Ergebnis bleibt im Turnier.
 
 Ist die Verbindung gestört, versucht der Client es mit wachsender Pause erneut (bis 60 s). Hat er ein Match angelegt, die Rückmeldung aber nicht mehr geschafft, findet er es beim nächsten Durchlauf über die Match-ID wieder und legt es kein zweites Mal an.
 
