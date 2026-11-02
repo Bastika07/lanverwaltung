@@ -51,7 +51,7 @@ adminViews.cs2 = {
             <div class="meta">${m.tournament ? `${esc(m.tournament.name)} · ${esc(m.label)} · ` : ''}${esc(m.format.toUpperCase())}${m.auto ? ' · automatisch' : ''}</div></td>
           <td>${cs2Maps(m)}<div class="meta">Maps ${m.wonA}:${m.wonB}</div></td>
           <td><span class="badge">${esc(CS2_STATES[m.state] || m.state)}</span>
-            ${m.reported ? '<div class="meta">✅ im Turnier eingetragen</div>' : ''}${m.note ? `<div class="meta"><strong>${esc(m.note)}</strong></div>` : ''}</td>
+            ${m.reported ? '<div class="meta">✅ im Turnier eingetragen</div>' : ''}${m.note ? `<div class="meta"><strong>${esc(m.note)}</strong></div>` : ''}${m.server && ['ELECTION', 'MATCH_MAP'].includes(m.state) ? `<div class="meta">connect ${esc(m.server)}</div>` : ''}</td>
           <td><div class="row">${m.link ? `<a class="btn small" href="${esc(m.link)}" target="_blank" rel="noopener">TMT2 ↗</a>` : ''}
             <button class="small danger" data-cs2del="${esc(m.id)}" title="Entfernen (in TMT2 beendet es der LAN-Client)">🗑</button></div></td></tr>`).join('')}</tbody></table></div>`
     : '<p class="meta">Noch keine Matches.</p>'}

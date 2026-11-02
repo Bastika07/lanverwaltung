@@ -65,6 +65,9 @@ function createAgent({ lanUrl, agentToken, tmtUrl, tmtToken, log = console }) {
     matchMaps: list(x.matchMaps).slice(0, 9).map((mm) => ({ name: mm.name, state: mm.state, score: { teamA: mm.score && mm.score.teamA, teamB: mm.score && mm.score.teamB } })),
   });
 
+  // Adresse des zugeteilten Gameservers für die Spieler (connect …) – ohne RCON-Passwort
+  const server = (g) => (g && typeof g.ip === 'string' && Number.isInteger(g.port) ? { ip: g.ip.slice(0, 100), port: g.port } : null);
+
   // Ein Durchlauf: Aufträge holen, an TMT2 ausführen, Ergebnis melden. Gibt die gewünschte Pause in Sekunden zurück.
   async function cycle() {
     const jobs = await lan('GET', '/api/cs2/agent/poll') || {};
@@ -76,7 +79,7 @@ function createAgent({ lanUrl, agentToken, tmtUrl, tmtToken, log = console }) {
         const existing = list(await tmt('GET', `/api/matches?passthrough=${encodeURIComponent(j.id)}`)).find((m) => m.passthrough === j.id && !m.isStopped);
         const m = existing || await tmt('POST', '/api/matches', createBody(j.id, j.body));
         if (!m || typeof m.id !== 'string') throw new RemoteError('keine Match-ID erhalten', 502);
-        out.created.push({ id: j.id, tmtId: m.id });
+        out.created.push({ id: j.id, tmtId: m.id, server: server(m.gameServer) });
         log.log(`TMT2-Match ${m.id} angelegt (${j.id})`);
       } catch (err) {
         if (!(err instanceof RemoteError)) throw err; // TMT2 nicht erreichbar: beim nächsten Durchlauf erneut
