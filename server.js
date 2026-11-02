@@ -392,7 +392,8 @@ function pings(t, idx) {
 
 const who = (t, p) => Discord.md(t.participants[p]);
 const tLink = (t) => (PUBLIC_URL ? `<${PUBLIC_URL}/#/t/${t.id}>` : '');
-const matchLine = (t, m) => `⚔️ ${Discord.md(m.label)}: **${who(t, m.a)}**${pings(t, m.a)} vs **${who(t, m.b)}**${pings(t, m.b)}`;
+const pairLine = (t, m) => `${Discord.md(m.label)}: **${who(t, m.a)}**${pings(t, m.a)} vs **${who(t, m.b)}**${pings(t, m.b)}`;
+const matchLine = (t, m) => `⚔️ ${pairLine(t, m)}`;
 const matchKey = (m) => `${m.id}:${m.a}:${m.b}`;
 
 function resultLine(t, m) {
@@ -469,6 +470,14 @@ const tournamentApi = {
     Access.bindPlayers(db, t);
     if (t.discordEnabled !== false) discordSync(t);
     save(); broadcast('tournament', t.id);
+  },
+  // CS2-Match ist in TMT2 angelegt (lib/tmt.js): Spieler anpingen, mit Server zum Verbinden. Nur solange die
+  // Paarung unverändert spielbereit ist.
+  announceServer(t, matchId, pa, pb, server) {
+    if (t.status !== 'running') return;
+    const m = Bracket.compute(t).matches.find((x) => x.id === matchId);
+    if (!m || m.status !== 'ready' || m.a !== pa || m.b !== pb) return;
+    announce(t, [`🎮 **${Discord.md(t.name)}** – ${pairLine(t, m)}`, server ? `Server bereit: \`connect ${server}\`` : 'Server in TMT2 bereit']);
   },
   // Ergebnis aus TMT2 (lib/tmt.js): nur für ein offenes Spiel mit unveränderter Paarung, nie als Korrektur.
   // maps: gespielte Maps mit Rundenstand ({ name, a, b }), wird zur Anzeige am Ergebnis gespeichert.

@@ -25,7 +25,8 @@ async function fakeTmt(t) {
       if (req.method === 'POST' && url.pathname === '/api/matches') {
         if (state.noServer) { res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end(typeof state.noServer === 'string' ? state.noServer : 'no free game server available'); }
         if (body.teamA.name === 'busy') return reply(400, { message: 'invalid <b>map pool</b>' });
-        const m = { id: `tmt-${matches.size + 1}`, state: 'ELECTION', isStopped: false, matchMaps: [], rconPassword: 'SECRET_RCON', ...body };
+        const m = { id: `tmt-${matches.size + 1}`, state: 'ELECTION', isStopped: false, matchMaps: [], rconPassword: 'SECRET_RCON', ...body,
+          gameServer: { ip: '10.0.0.5', port: 27014 + matches.size + 1, rconPassword: 'SECRET_RCON' } }; // TMT2 teilt einen freien Server zu
         matches.set(m.id, m);
         return reply(201, m);
       }
