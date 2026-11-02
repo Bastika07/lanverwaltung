@@ -105,6 +105,15 @@ test('CS2/TMT2: stopping, crash recovery, TMT2 errors and validation', async (t)
   m = (await admin(app)).matches.find((x) => x.id === waiting.data.id);
   assert.equal(m.state, 'ELECTION', 'sobald ein Server frei ist, wird das Match angelegt');
   assert.equal(tmt.calls.filter((x) => x.method === 'POST' && x.body.teamA.name === 'Wartend').length, 3);
+  // Ein noch nicht freigegebenes Match hält den Server: ebenfalls warten statt Fehler
+  tmt.state.noServer = 'game server already in use by tmt-1';
+  const held = await create({ teamA: 'Gehalten', teamB: 'Bravo' });
+  await agent.cycle();
+  m = (await admin(app)).matches.find((x) => x.id === held.data.id);
+  assert.deepEqual([m.state, m.note], ['PENDING', 'Wartet auf einen freien Gameserver in TMT2']);
+  tmt.state.noServer = false;
+  await agent.cycle();
+  assert.equal((await admin(app)).matches.find((x) => x.id === held.data.id).state, 'ELECTION');
 
   // Absturz zwischen Anlegen und Melden: das schon vorhandene TMT2-Match wird wiederverwendet
   const free = await create({ teamA: 'Alpha', teamB: 'Bravo', format: 'bo1' });

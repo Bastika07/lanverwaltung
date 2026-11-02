@@ -139,3 +139,46 @@ test('CS2-Turnier: Bo1 trägt den Rundenstand ein, Bo3 die gewonnenen Maps mit R
   const pub = (await app.request('/api/tournaments/cup')).data;
   assert.ok(Object.values(pub.results).some((r) => Array.isArray(r.maps) && r.maps.length === 3));
 });
+
+test('CS2-Turnier: Unentschieden wartet auf ein Ergebnis von Hand, danach wird das TMT2-Match beendet', async (t) => {
+  const tmt = await fakeTmt(t);
+  const app = await start(t, withCup());
+  const agent = agentFor(app, tmt);
+  await agent.cycle();
+  const [first, second] = [...tmt.matches.values()];
+  finish(first, 12, 12); // ohne Verlängerung möglich
+  finish(second, 13, 4);
+  await agent.cycle();
+  let d = await cs2(app);
+  const draw = d.matches.find((m) => m.tmtId === first.id);
+  assert.deepEqual([draw.state, draw.reported, /Kein eindeutiger Sieger/.test(draw.note)], ['FINISHED', false, true]);
+  // TMT2 lädt die Map nach dem Unentschieden neu und hält den Server; ohne Ergebnis bleibt alles stehen
+  Object.assign(first, { state: 'MATCH_MAP', matchMaps: [{ name: 'de_nuke', state: 'WARMUP', score: { teamA: 0, teamB: 0 } }] });
+  await agent.cycle();
+  assert.equal(first.isStopped, false);
+  assert.equal((await cs2(app)).matches.find((m) => m.id === draw.id).state, 'FINISHED', 'der neue Stand überschreibt das Unentschieden nicht');
+
+  const names = cupData().participants;
+  const bm = Bracket.playable(Bracket.compute(cupData())).find((x) => names[x.a] === draw.teamA);
+  const r = await app.request(`/api/tournaments/cup/matches/${bm.id}`, { method: 'POST', admin: true, body: { a: 13, b: 12 } });
+  assert.equal(r.status, 200, r.text);
+  await agent.cycle(); // beendet das TMT2-Match und legt das Finale an
+  assert.equal(first.isStopped, true, 'Gameserver wird freigegeben');
+  d = await cs2(app);
+  assert.equal(d.matches.some((m) => m.id === draw.id), false);
+  assert.ok(d.matches.some((m) => m.label === 'Finale' && m.state === 'ELECTION'));
+});
+
+test('CS2-Turnier: wegen belegtem Gameserver als Fehler markierte Matches werden wieder angelegt', async (t) => {
+  const tmt = await fakeTmt(t);
+  const semi = Bracket.playable(Bracket.compute(cupData()))[0];
+  const app = await start(t, withCup((e) => {
+    e.cs2 = { mapPool: ['de_nuke', 'de_mirage', 'de_inferno'], stops: [], matches: [{ id: 'held', tmtId: null, format: 'bo1', mapPool: ['de_nuke'], state: 'ERROR',
+      maps: [], wonA: 0, wonB: 0, reported: false, note: 'TMT2: 500: game server already in use by abc', auto: true, tournamentId: 'cup', matchId: semi.id,
+      pa: semi.a, pb: semi.b, label: semi.label, teamA: 'Alpha', teamB: 'Delta', createdAt: new Date().toISOString(), updatedAt: null }] };
+  }));
+  await agentFor(app, tmt).cycle();
+  const m = (await cs2(app)).matches.find((x) => x.id === 'held');
+  assert.equal(m.state, 'ELECTION');
+  assert.equal(posts(tmt).filter((x) => x.body.teamA.name === 'Alpha').length, 1);
+});
