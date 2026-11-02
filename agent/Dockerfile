@@ -11,6 +11,8 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack 
     && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
 COPY LICENSE NOTICE ./
 COPY agent/tmt2-agent.js ./agent/
+# Lesbar für "node", auch wenn der Build-Kontext restriktive Rechte/ACLs hat (z. B. TrueNAS-Datasets)
+RUN chmod -R a+rX /app
 
 USER node
 CMD ["node", "agent/tmt2-agent.js"]

@@ -17,6 +17,8 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack 
 COPY package.json server.js LICENSE NOTICE ./
 COPY lib ./lib
 COPY public ./public
+# Lesbar für "node", auch wenn der Build-Kontext restriktive Rechte/ACLs hat (z. B. TrueNAS-Datasets)
+RUN chmod -R a+rX /app
 
 # Datenverzeichnis gehört dem unprivilegierten Benutzer "node"
 RUN mkdir -p /data && chown node:node /data
