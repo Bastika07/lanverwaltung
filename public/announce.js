@@ -3,7 +3,7 @@
 // Durchsagen: Banner auf allen Seiten, große Einblendung auf dem Beamer (mit Gong),
 // Admin-Seite zum Senden. Auslöser können auch Discord (/announce) und das Programm sein.
 
-const Announce = { active: null, hideTimer: null, lastGongId: null, audio: null };
+const Announce = { active: null, hideTimer: null, lastGongId: null, audio: null, speech: false };
 
 function fmtClock(iso) {
   return new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
@@ -28,11 +28,26 @@ function playGong() {
 }
 
 function unlockAudio() {
+  // Sprachausgabe gibt der Browser wie den Ton erst nach einem Klick frei: einmal leer anstoßen
+  if ('speechSynthesis' in window && !Announce.speech) { speechSynthesis.speak(new SpeechSynthesisUtterance(' ')); Announce.speech = true; }
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return false;
   if (!Announce.audio) Announce.audio = new AC();
   Announce.audio.resume();
   return true;
+}
+
+// Vorlesen mit der Sprachausgabe des Browsers (Stimme vom Betriebssystem, keine Daten nach außen).
+// Emoji fliegen raus, sonst liest die Stimme ihre Namen mit.
+function speak(text) {
+  if (!Announce.speech || !('speechSynthesis' in window)) return;
+  const clean = String(text).replace(/[\p{Extended_Pictographic}\p{Variation_Selector}\p{Join_Control}]/gu, '').replace(/\s+/g, ' ').trim();
+  if (!clean) return;
+  const u = new SpeechSynthesisUtterance(clean);
+  u.lang = 'de-DE';
+  const voice = speechSynthesis.getVoices().find((v) => /^de([-_]|$)/i.test(v.lang));
+  if (voice) u.voice = voice;
+  speechSynthesis.speak(u);
 }
 
 function isActive(a) {
@@ -65,7 +80,10 @@ function showAnnouncement() {
   </div>`;
   if (Announce.lastGongId !== a.id) {
     Announce.lastGongId = a.id;
-    if (a.gong && document.body.classList.contains('beamer-mode')) playGong();
+    if (document.body.classList.contains('beamer-mode')) {
+      if (a.gong) playGong();
+      if (state.settings.speakAnnouncements) setTimeout(() => speak(`Durchsage: ${a.text}`), a.gong ? 2200 : 0); // nach dem Gong
+    }
   }
   if (a.until) Announce.hideTimer = setTimeout(showAnnouncement, Date.parse(a.until) - Date.now() + 200);
 }
@@ -115,6 +133,7 @@ adminViews.ansagen = {
               <label class="check"><input type="checkbox" id="annLamp" ${lampOk ? 'checked' : 'disabled'}> 🔴 Lampe${lampOk ? '' : ' (nicht eingerichtet)'}</label>
               <label class="check"><input type="checkbox" id="annGong" checked> 🔔 Gong (Beamer)</label>
               <label class="check"><input type="checkbox" id="annDiscord" ${state.discord ? 'checked' : 'disabled'}> 💬 Discord</label>
+              <label class="check" title="Discord liest die Durchsage bei allen vor, die den Kanal offen haben und TTS nicht abgeschaltet haben"><input type="checkbox" id="annTts" ${state.discord ? '' : 'disabled'}> 🗣️ in Discord vorlesen</label>
             </div>
             <div class="field" style="margin-top:12px"><label for="annSec">Dauer in Sekunden <span class="meta">(0 = bis zum manuellen Beenden)</span></label>
               <input type="number" id="annSec" min="0" max="3600" value="${s.announceSeconds}" style="max-width:140px"></div>
@@ -157,6 +176,7 @@ adminViews.ansagen = {
           lamp: document.getElementById('annLamp').checked,
           gong: document.getElementById('annGong').checked,
           discord: document.getElementById('annDiscord').checked,
+          tts: document.getElementById('annTts').checked,
           seconds: Number(document.getElementById('annSec').value),
         });
         toast('📢 Durchsage gesendet');

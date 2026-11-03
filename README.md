@@ -52,7 +52,7 @@ Jedes Modul lässt sich im Admin-Bereich unter **Einstellungen → Module** pro 
 |---|---|
 | 📋 **Event** | Allgemeine Eventdetails für Interessierte und Käufer, auch für kommende Events. Beginn, Ende, Mindestalter sowie Ticketarten mit Preisen und Beschreibung kommen automatisch aus dem Event. Dazu Location mit Adresse und Kartenlink, Teilnehmerzahl, Zuschauereintritt und ein freier Text (Admin → Eventdetails). |
 | 🏆 **Turniere** | Single und Double Elimination sowie „Jeder gegen jeden“. Freilose werden automatisch vergeben. Ergebnisse tragen die Spieler selbst ein, Korrekturen nur der Admin. „Jetzt dran“ zeigt die offenen Spiele. Teamturniere mit Teamgröße. |
-| 📢 **Durchsagen** | Banner auf allen Seiten, große Einblendung mit Gong auf dem Beamer, Post in Discord und eine DMX-Lampe, die rot wird. Auslöser sind die Webseite, `/announce` in Discord oder ein Programmpunkt. |
+| 📢 **Durchsagen** | Banner auf allen Seiten, große Einblendung mit Gong auf dem Beamer, Post in Discord und eine DMX-Lampe, die rot wird. Auslöser sind die Webseite, `/announce` in Discord oder ein Programmpunkt. Auf Wunsch liest Discord die Durchsage vor (Häkchen „in Discord vorlesen“ bzw. `/announce vorlesen:True`). |
 | 🗓️ **Programm** | Zeitplan mit Live-Countdown. Erinnerung in Discord vor jedem Punkt, auf Wunsch eine Durchsage zum Beginn. |
 | 🍽️ **Catering** | Essensangebote mit Preis, Ausgabezeit, Anmeldeschluss und optionaler Höchstzahl. Gäste melden sich und eigene Ticketinhaber an; Admins weisen Gäste zu und markieren Zahlungen. Eigene Anmeldungen bleiben privat, Preise bestehender Anmeldungen unverändert. Standardmäßig ausgeschaltet. |
 | ℹ️ **Infos** | Infos vor Ort: WLAN, Gameserver (IP und Passwort zum Kopieren), Spieleliste und Hausregeln. |
@@ -61,7 +61,7 @@ Jedes Modul lässt sich im Admin-Bereich unter **Einstellungen → Module** pro 
 | 🎟️ **Tickets** | Anmeldung mit Discord, eigene Daten (Name, Anschrift, E-Mail, Geburtsdatum) mit Einwilligung, Bestellung mehrerer Tickets mit einem Namen pro Ticket, Bezahlung per Überweisung mit eindeutigem Verwendungszweck. Der Admin bestätigt Zahlungen, checkt ein und exportiert als CSV. Bezahlte Tickets landen in der Teilnehmerliste. Ticketverkauf pro Event, auch als Vorverkauf fürs nächste. Standardmäßig ausgeschaltet. |
 | 🖥️ **Gastserver** | Teilnehmer mit Ticket melden eigene Server an: Servername, Beschreibung und auf Wunsch ein Reverse-DNS-Eintrag. Sie bekommen sofort die nächste freie IP aus dem Bereich des Events und den FQDN `<name>.<domain>`, auch per Discord-Nachricht. Die Orga stellt unter Admin → Gastserver Domain, IP-Bereich und Höchstzahl pro Person ein, sperrt oder löscht Server und trägt die DNS-Einträge selbst ein: Dafür gibt es einen Export als Zonendatei-Zeilen (A-Records und gewünschte PTR) und als CSV. Gesperrte Server kann nur die Orga entsperren oder löschen; neue Server eines Betreibers mit gesperrtem Server sind bis zur Prüfung gesperrt, auch nach Kontolöschung und erneutem Login (nur über einen HMAC der Discord-ID, siehe [docs/security-operations.md](docs/security-operations.md)). Verliert der Betreiber sein letztes gültiges Teilnehmerticket (Storno, Zahlungsrücknahme), verschwindet der Server aus öffentlicher Liste und DNS-Export, behält aber seine IP; mit erneuter Berechtigung ist er wieder aktiv. Standardmäßig ausgeschaltet. |
 | 🔫 **CS2-Matches** | Brücke zu **TMT2** ([Fork](https://github.com/Bastika07/tmt2) von [JensForstmann/tmt2](https://github.com/JensForstmann/tmt2), MIT): Für eine spielbereite Turnierpaarung legt die Orga ein Counter-Strike-2-Match an (BO1/BO3/BO5, Mappool pro Event). TMT2 betreut Mapwahl, Messerrunde und Mapwechsel auf einem freien Gameserver. Das Endergebnis kommt einmalig in den Turnierbaum (BO1 mit Rundenstand, BO3/BO5 mit gewonnenen Maps und den Rundenständen je Map). Sobald ein Server zugeteilt ist, pingt der Bot die Spieler im Turnierkanal mit `connect ip:port`. Die Admin-Seite zeigt die Gameserver mit Zustand und Belegung und verlinkt TMT2 und das AMP-Panel. Ein CS2-Turnier lässt sich ganz abgleichen: Mit „CS2-Matches automatisch in TMT2 anlegen“ (Format für alle Spiele und fürs Finale) bekommt jede spielbereite Paarung selbst ein Match. TMT2 und ein kleiner LAN-Client laufen im LAN bei den CS2-Servern ([docker-compose.lan.yml](docker-compose.lan.yml)); der Client verbindet sich nur nach außen mit dieser Seite, die Server müssen nicht aus dem Internet erreichbar sein. Einrichtung in [docs/tmt2.md](docs/tmt2.md). Nur Orga, standardmäßig ausgeschaltet. |
-| 📺 **Beamer** | Vollbild-Infoscreen (`/#/beamer`). Er wechselt zwischen Turnieren, Programm, Infos und Sitzplan, daneben stehen „Als Nächstes“ und „Jetzt dran“. |
+| 📺 **Beamer** | Vollbild-Infoscreen (`/#/beamer`). Er wechselt zwischen Turnieren, Programm, Infos und Sitzplan, daneben stehen „Als Nächstes“ und „Jetzt dran“. Unter **Einstellungen → Beamer** liest er Durchsagen und neu anstehende Turnierspiele vor, mit der Sprachausgabe des Browsers über die Hallenlautsprecher. |
 
 **Nur für bestätigte Teilnehmer:** Die Module lassen sich pro Event auf „🔒 nur Teilnehmer mit Ticket“ stellen. Berechtigt sind angemeldete Käufer bezahlter Teilnehmertickets, verknüpfte Inhaber bezahlter Teilnehmertickets oder verknüpfte Personen mit ausdrücklicher **Orga-Freigabe** für dieses Event. Tickets einer Ticketart ohne „zählt als Teilnehmer“ (z. B. Zuschauer) verschaffen diese Rechte nicht, auch nicht für Gastserver. Eine Selbstanmeldung mit `/ich` genügt nicht. Stornierung oder Zahlungsrücknahme entzieht ticketabhängige Rechte; eine unabhängige Orga-Freigabe bleibt erhalten. Ticketpersonen ohne Orga-Freigabe und ohne weiteres gültiges Teilnehmerticket verlieren dabei auch Teilnahme und Sitzplatz (außer auf einem von der Orga vergebenen gesperrten Platz); nach erneuter Zahlung sind sie wieder dabei und wählen ihren Platz neu. Der Admin sieht alles. Sitzplandaten und interne Notizen werden auch auf alternativen API-Pfaden entsprechend geschützt.
 
@@ -85,7 +85,7 @@ Er kennt diese Slash-Befehle:
 
 | Befehl | Wofür |
 |---|---|
-| `/announce <nachricht>` | Durchsage (Lampe, Beamer, Webseite, Discord). Optional nur für eine Rolle freigegeben. |
+| `/announce <nachricht> [vorlesen]` | Durchsage (Lampe, Beamer, Webseite, Discord). Mit `vorlesen:True` liest Discord sie vor. Optional nur für eine Rolle freigegeben. |
 | `/announce_ende` | Durchsage vorzeitig beenden, die Lampe geht aus. |
 | `/ich <name> [ticketcode]` | Neue unbestätigte Person anlegen oder bestehende Person mit eigenem bezahltem Ticket bzw. gültigem Ticketcode verknüpfen. Alternativ verknüpft die Orga die geprüfte Discord-Benutzer-ID. Ticketcodes vertraulich behandeln. |
 | `/clan [name]` | Eigenen Clan bzw. eigenes Team setzen, leer lassen zum Entfernen. Erscheint im Sitzplan. |
@@ -128,7 +128,7 @@ Ohne Discord-Login und ohne `ADMIN_PASSWORD` erzeugt der Server beim ersten Star
 ## Discord einrichten
 
 1. Im [Discord Developer Portal](https://discord.com/developers/applications) eine Anwendung anlegen und unter **Bot** das Token erzeugen. Es kommt als `DISCORD_BOT_TOKEN` in die `.env`.
-2. Unter **OAuth2 → URL Generator** die Scopes `bot` und `applications.commands` wählen, dazu die Berechtigungen **Manage Channels**, **View Channels** und **Send Messages**. Mit der erzeugten URL den Bot einladen.
+2. Unter **OAuth2 → URL Generator** die Scopes `bot` und `applications.commands` wählen, dazu die Berechtigungen **Manage Channels**, **View Channels** und **Send Messages**, für vorgelesene Durchsagen auch **Send TTS Messages**. Mit der erzeugten URL den Bot einladen.
 3. Die Server-ID (Rechtsklick auf den Server, Entwicklermodus muss an sein) als `DISCORD_GUILD_ID` eintragen.
 4. Den Container neu starten. Im Log steht danach „Discord-Gateway verbunden“.
 
@@ -249,7 +249,9 @@ Nicht die laufende SQLite-Hauptdatei allein kopieren: Änderungen können im WAL
 ## Hinweise
 
 - Admin-Sitzungen liegen nur im Arbeitsspeicher. Nach einem Neustart muss man sich neu anmelden.
-- Für den Gong muss am Beamer einmal auf 🔔 (oder Vollbild) geklickt werden, weil Browser Ton erst nach einer Interaktion erlauben.
+- Für den Gong muss am Beamer einmal auf 🔔 (oder Vollbild) geklickt werden, weil Browser Ton erst nach einer Interaktion erlauben. Das gilt auch für die Sprachausgabe.
+- Die Beamer-Stimme kommt vom Betriebssystem des Beamer-Rechners; dort eine deutsche Stimme installieren. Es gehen keine Daten an externe Dienste. Mehr als drei neue Spiele auf einmal fasst der Beamer zu „N neue Spiele sind dran“ zusammen.
+- Discord liest vorgelesene Durchsagen nur bei Leuten vor, die den Kanal gerade offen haben und TTS nicht abgeschaltet haben. Emoji und Fettdruck lässt der Bot dafür weg.
 - Für den Betrieb im Internet sollte ein Reverse-Proxy mit HTTPS davor. Im LAN ist das nicht nötig.
 
 ## Mit KI entwickelt
