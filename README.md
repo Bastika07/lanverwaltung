@@ -251,7 +251,7 @@ Nicht die laufende SQLite-Hauptdatei allein kopieren: Änderungen können im WAL
 - Admin-Sitzungen liegen nur im Arbeitsspeicher. Nach einem Neustart muss man sich neu anmelden.
 - Für den Gong muss am Beamer einmal auf 🔔 (oder Vollbild) geklickt werden, weil Browser Ton erst nach einer Interaktion erlauben. Das gilt auch für die Sprachausgabe.
 - Die Beamer-Stimme kommt vom Betriebssystem des Beamer-Rechners; dort eine deutsche Stimme installieren. Es gehen keine Daten an externe Dienste. Mehr als drei neue Spiele auf einmal fasst der Beamer zu „N neue Spiele sind dran“ zusammen.
-- Discord liest vorgelesene Durchsagen nur bei Leuten vor, die den Kanal gerade offen haben und TTS nicht abgeschaltet haben. Emoji und Fettdruck lässt der Bot dafür weg.
+- Discord liest vorgelesene Durchsagen nur bei Leuten vor, die den Kanal gerade offen haben und TTS nicht abgeschaltet haben. Vorgelesen wird nur der Text selbst, ohne Emoji und ohne „Durchsage von …“. Den Botnamen davor spricht Discord selbst, der lässt sich nicht abschalten.
 - Für den Betrieb im Internet sollte ein Reverse-Proxy mit HTTPS davor. Im LAN ist das nicht nötig.
 
 ## Mit KI entwickelt
