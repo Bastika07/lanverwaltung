@@ -57,6 +57,11 @@ adminViews.einstellungen = {
               <p class="hint">Beamer-Ansicht öffnen: <a href="#/beamer">${esc(location.host)}/#/beamer</a> – einmal auf „🔇 Ton aktivieren“ klicken, danach schaltet der Knopf zwischen Ton aus, nur Gong und Gong und vorlesen um.
                 Die Stimme kommt vom Betriebssystem des Beamer-Rechners (Deutsch installieren).</p>
             </div>
+            <div class="card"><h2>🪙 Turnier-Coins</h2>
+              <div class="field"><label for="cBudget">Coins pro Person und Event <span class="meta">(0 = aus)</span></label><input id="cBudget" type="number" min="0" max="99" value="${s.coinBudget || 0}" style="max-width:140px"></div>
+              <p class="hint">Turniere mit Kosten (im Turnierformular) ziehen Coins ab. So kann sich niemand für alle Preisturniere anmelden.
+                Geprüft wird bei <code>/anmelden</code>, <code>/team gruenden</code> und <code>/team beitreten</code>; den Stand zeigt <code>/coins</code>. Die Orga kann trotzdem jeden eintragen.</p>
+            </div>
           </div>
           <div>
             <div class="card"><h2>📢 Durchsagen</h2>
@@ -99,6 +104,7 @@ adminViews.einstellungen = {
           adminRole: v('adRole'),
           remindMinutes: Number(v('rMin')),
           mentionPlayers: document.getElementById('mPlayers').checked,
+          coinBudget: Number(v('cBudget')),
           modules: Object.fromEntries([...app.querySelectorAll('[data-module]')].map((c) => [c.dataset.module, c.checked])),
           access: Object.fromEntries([...app.querySelectorAll('[data-access]')].map((c) => [c.dataset.access, c.value])),
           dmx: { url: v('dUrl'), universe: Number(v('dUni')), on: v('dOn'), off: v('dOff') },

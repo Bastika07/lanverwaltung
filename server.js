@@ -66,6 +66,7 @@ const DEFAULT_SETTINGS = {
   adminRole: env.ADMIN_DISCORD_ROLE || '', // Eindeutige Discord-Rollen-ID für den Admin-Bereich
   remindMinutes: 10,
   mentionPlayers: true,
+  coinBudget: 0, // Coins je Person und Event für Turniere mit Kosten (0 = Coin-System aus)
   // Module der LAN-Party, einzeln abschaltbar (z. B. kein Beamer, kein Sitzplan)
   modules: { details: true, tournaments: true, announcements: true, schedule: true, info: true, people: true, seating: true, beamer: true, tickets: false, servers: false, catering: false, cs2: false },
   dmx: {
@@ -123,6 +124,7 @@ const publicSettings = () => ({
   publicUrl: (process.env.PUBLIC_URL || '').replace(/\/+$/, '') || null, // für Links in QR-Codes
   event: modules.event ? modules.event.state() : null, // das aktuelle Event
   beamerSeconds: settings().beamerSeconds,
+  coinBudget: coinBudget(),
   speakMatches: !!settings().speakMatches,
   modules: visibleModules(),
 });
@@ -257,7 +259,64 @@ function cleanParticipants(list) {
   return names;
 }
 
-function cleanType(v) { return ['ko', 'de', 'rr'].includes(v) ? v : 'ko'; }
+function cleanType(v) { return ['ko', 'de', 'rr', 'groups'].includes(v) ? v : 'ko'; }
+const clampInt = (v, min, max, def) => { const n = Math.floor(Number(v)); return Number.isFinite(n) ? Math.min(Math.max(n, min), max) : def; };
+// Gruppenphase: Anzahl Gruppen und wie viele je Gruppe in die K.-o.-Runde kommen
+function cleanGroups(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return { count: 4, advance: 2 };
+  return { count: clampInt(v.count, 2, 16, 4), advance: clampInt(v.advance, 1, 4, 2) };
+}
+// Preise je Platz (Platz 1 zuerst), nur Text
+function cleanPrizes(v) {
+  if (v == null) return [];
+  if (!Array.isArray(v)) throw new HttpError(400, 'Preise: Liste erwartet');
+  const list = v.slice(0, 16).map((x) => str(x, 100));
+  while (list.length && !list[list.length - 1]) list.pop();
+  return list;
+}
+// Startzeiten je Runde: { Rundenschlüssel: ISO-Zeit } (Schlüssel aus Bracket: r0, w1, l2, g0, gd0, kr0, p3, kp3, gf1, gf2)
+const ROUND_KEY = /^(?:(?:r|w|l|g|gd|kr)\d{1,2}|p3|kp3|gf1|gf2)$/;
+function cleanRoundTimes(v) {
+  if (v == null) return {};
+  if (typeof v !== 'object' || Array.isArray(v)) throw new HttpError(400, 'Rundenzeiten: Objekt erwartet');
+  const out = {};
+  for (const [k, iso] of Object.entries(v).slice(0, 80)) {
+    if (!ROUND_KEY.test(k) || !iso) continue;
+    const ms = Date.parse(String(iso));
+    if (!Number.isFinite(ms)) throw new HttpError(400, 'Rundenzeiten: ungültige Uhrzeit');
+    out[k] = new Date(ms).toISOString();
+  }
+  return out;
+}
+function cleanDate(v) {
+  if (!v) return null;
+  const ms = Date.parse(String(v));
+  if (!Number.isFinite(ms)) throw new HttpError(400, 'Ungültiges Datum');
+  return new Date(ms).toISOString();
+}
+// Turnierleiter: nur bestehende Personen (feste IDs)
+function cleanReferees(v) {
+  if (v == null) return [];
+  if (!Array.isArray(v)) throw new HttpError(400, 'Turnierleiter: Liste erwartet');
+  const ids = [...new Set(v.filter((id) => typeof id === 'string'))].slice(0, 20);
+  if (ids.some((id) => !db.persons.some((p) => p.id === id))) throw new HttpError(400, 'Turnierleiter: unbekannte Person');
+  return ids;
+}
+// Optionale Turnierfelder (Anlegen, Bearbeiten). Gibt nur übergebene Felder zurück; alles wird vor dem Ändern geprüft.
+function tournamentExtras(body) {
+  const out = {};
+  if (body.groups !== undefined) out.groups = cleanGroups(body.groups);
+  if (body.prizes !== undefined) out.prizes = cleanPrizes(body.prizes);
+  if (body.roundTimes !== undefined) out.roundTimes = cleanRoundTimes(body.roundTimes);
+  if (body.maxParticipants !== undefined) out.maxParticipants = clampInt(body.maxParticipants, 0, 256, 0);
+  if (body.signupUntil !== undefined) out.signupUntil = cleanDate(body.signupUntil);
+  if (body.seeds !== undefined) out.seeds = clampInt(body.seeds, 0, 256, 0);
+  if (body.coins !== undefined) out.coins = clampInt(body.coins, 0, 99, 0);
+  if (body.confirm !== undefined) out.confirm = !!body.confirm;
+  if (body.confirmMinutes !== undefined) out.confirmMinutes = clampInt(body.confirmMinutes, 1, 120, 10);
+  if (body.referees !== undefined) out.referees = cleanReferees(body.referees);
+  return out;
+}
 function cleanTeamSize(v) { const n = Math.floor(Number(v)); return n >= 1 && n <= 20 ? n : 1; }
 // CS2-Turnier mit TMT2 abgleichen (lib/tmt.js): null = aus, sonst Format für alle Spiele und für das Finale
 function cleanCs2(v) {
@@ -274,12 +333,80 @@ function str(v, max = 100) {
 }
 
 // Ergebnisse entfernen, die nach einer Änderung nicht mehr zu den Paarungen passen.
+// Offene Meldungen und „läuft“ gelten nur für spielbereite Spiele mit unveränderter Paarung.
 function pruneStale(t) {
   const view = Bracket.compute(t);
   if (!view) return;
   const valid = new Set(view.matches.filter((m) => m.status === 'done').map((m) => m.id));
   for (const id of Object.keys(t.results)) if (!valid.has(id)) delete t.results[id];
+  const ready = new Map(view.matches.filter((m) => m.status === 'ready').map((m) => [m.id, m]));
+  for (const key of ['pending', 'playing']) {
+    if (!t[key]) continue;
+    for (const [id, x] of Object.entries(t[key])) {
+      const m = ready.get(id);
+      if (!m || x.pa !== m.a || x.pb !== m.b) delete t[key][id];
+    }
+  }
 }
+
+// Unentschieden nur bei „jeder gegen jeden“ und in Gruppenspielen
+const drawAllowed = (t, m) => t.type === 'rr' || (t.type === 'groups' && m.id.startsWith('G'));
+
+// ---------- Turnierleitung, Protokoll, Ergebnisse ----------
+// Wer handelt: Orga (Admin), Turnierleiter dieses Turniers oder ein Spieler (mit seiner Person)
+function actor(req, t) {
+  const admin = isAdmin(req);
+  const account = modules.accounts && modules.accounts.current(req);
+  const referee = !admin && !!account && Access.isReferee(db, account.id, t);
+  const person = account ? (db.persons || []).find((p) => p.discordId === account.id) : null;
+  const name = admin ? 'Orga' : person ? person.name + (referee ? ' (Turnierleitung)' : '') : 'Unbekannt';
+  return { admin, referee, manage: admin || referee, account, name };
+}
+
+// Protokoll je Spiel (nur Orga und Turnierleitung sehen es), die letzten 300 Einträge
+function logMatch(t, m, text, by) {
+  t.log = (t.log || []).concat({ at: new Date().toISOString(), match: m ? m.id : null, label: m ? str(m.label, 80) : '', text: str(text, 200), by: str(by, 80) }).slice(-300);
+}
+
+// Für das Protokoll: Ergebnis bzw. wer kampflos gewinnt
+const scoreText = (t, m, r) => (r.wo ? `${t.participants[r.wo === 'a' ? m.b : m.a]} gewinnt kampflos` : `${r.a}:${r.b}`);
+
+// Ergebnis festschreiben (Meldung, Bestätigung, Orga, TMT2): Gewinner wandert weiter, abhängige Ergebnisse
+// verfallen, Discord sagt an. view: Ansicht vor der Änderung.
+function commitResult(t, view, m, r, by, text) {
+  const wasFinished = isFinished(t);
+  const correction = m.status === 'done';
+  t.results[m.id] = { ...r, pa: m.a, pb: m.b, at: new Date().toISOString() };
+  if (t.pending) delete t.pending[m.id];
+  if (t.playing) delete t.playing[m.id];
+  pruneStale(t);
+  logMatch(t, m, `${text} ${scoreText(t, m, r)}`, by);
+  discordAfterResult(t, wasFinished);
+  announceResult(t, view, m.id, correction);
+  save(); broadcast('tournament', t.id);
+}
+
+// Offene Meldungen ohne Einspruch gelten nach t.confirmMinutes automatisch
+function autoConfirm() {
+  for (const t of allTournaments()) {
+    if (t.status !== 'running' || !t.pending || !Object.keys(t.pending).length) continue;
+    const limit = (t.confirmMinutes || 10) * 60000;
+    for (const [id, p] of Object.entries(t.pending)) {
+      if (p.disputed || Date.now() - Date.parse(p.at) < limit) continue;
+      const view = Bracket.compute(t);
+      const m = view && view.matches.find((x) => x.id === id);
+      if (!m || m.status !== 'ready' || m.a !== p.pa || m.b !== p.pb) { delete t.pending[id]; continue; }
+      commitResult(t, view, m, { a: p.a, b: p.b }, 'System', 'Ohne Einspruch automatisch bestätigt:');
+    }
+  }
+}
+setInterval(autoConfirm, 20000).unref();
+setTimeout(autoConfirm, 1000).unref(); // auch gleich nach dem Start (Meldungen, die während eines Neustarts abgelaufen sind)
+
+// ---------- Coins ----------
+// Optional: Jede Person hat pro Event ein Budget (Einstellung coinBudget, 0 = aus); Turniere kosten t.coins.
+// Geprüft wird bei der Anmeldung über Discord (lib/commands.js).
+const coinBudget = () => Math.max(0, Math.floor(Number(settings().coinBudget) || 0));
 
 // ---------- Discord ----------
 // Aufgaben pro Turnier nacheinander im Hintergrund ausführen; Fehler blockieren das Turnier nicht.
@@ -327,7 +454,7 @@ function discordAfterResult(t, wasFinished) {
 }
 
 // ---------- Discord-Ansagen ----------
-const TYPE_NAMES = { ko: 'Single Elimination', de: 'Double Elimination', rr: 'Jeder gegen jeden' };
+const TYPE_NAMES = { ko: 'Single Elimination', de: 'Double Elimination', rr: 'Jeder gegen jeden', groups: 'Gruppenphase mit K.-o.-Runde' };
 const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/+$/, '');
 // Eigene Adresse: PUBLIC_URL, sonst aus der Anfrage (Reverse Proxy: X-Forwarded-Proto/-Host)
 function baseUrl(req) {
@@ -401,6 +528,8 @@ const matchKey = (m) => `${m.id}:${m.a}:${m.b}`;
 
 function resultLine(t, m) {
   const a = who(t, m.a), b = who(t, m.b);
+  if (m.wo === 'both') return `${a} und ${b} sind disqualifiziert`;
+  if (m.wo) return `**${who(t, m.winner)}** gewinnt kampflos gegen ${who(t, m.loser)}${m.dq ? ' (disqualifiziert)' : ''}`;
   return `${m.winner === m.a ? `**${a}**` : a} ${m.score.a} : ${m.score.b} ${m.winner === m.b ? `**${b}**` : b}`;
 }
 
@@ -459,7 +588,9 @@ function chosenPlayers(names, raw) {
 
 // Für Discord-Befehle (/anmelden, /team …)
 const tournamentApi = {
-  openForSignup: () => db.tournaments.filter((t) => t.status === 'draft' && t.signup),
+  // Offene Anmeldung: Entwurf mit Anmeldung, vor dem Anmeldeschluss
+  openForSignup: () => db.tournaments.filter((t) => t.status === 'draft' && t.signup && !(t.signupUntil && Date.parse(t.signupUntil) <= Date.now())),
+  list: () => db.tournaments, // Turniere des Events (Coins, siehe lib/commands.js)
   // Nur lesend (z. B. /jetzt): zwischengespeicherte Ansicht. isFinished bleibt frisch, weil Schreibpfade es vor save() aufrufen.
   running: () => db.tournaments.filter((t) => t.status === 'running' && !(cachedView(t) || {}).finished),
   view: (t) => cachedView(t),
@@ -480,6 +611,9 @@ const tournamentApi = {
     if (t.status !== 'running') return;
     const m = Bracket.compute(t).matches.find((x) => x.id === matchId);
     if (!m || m.status !== 'ready' || m.a !== pa || m.b !== pb) return;
+    // Server zugeteilt: das Spiel läuft
+    t.playing = t.playing || {};
+    if (!t.playing[m.id]) { t.playing[m.id] = { pa, pb, at: new Date().toISOString() }; logMatch(t, m, 'Läuft (TMT2-Server zugeteilt)', 'TMT2'); save(); broadcast('tournament', t.id); }
     announce(t, [`🎮 **${Discord.md(t.name)}** – ${pairLine(t, m)}`, server ? `Server bereit: \`connect ${server}\`` : 'Server in TMT2 bereit']);
   },
   // Ergebnis aus TMT2 (lib/tmt.js): nur für ein offenes Spiel mit unveränderter Paarung, nie als Korrektur.
@@ -490,17 +624,12 @@ const tournamentApi = {
     const view = Bracket.compute(t);
     const m = view.matches.find((x) => x.id === matchId);
     if (!m) return 'Spiel nicht mehr im Turnierbaum – Ergebnis bitte von Hand eintragen';
-    if (m.status === 'done') return m.score.a === a && m.score.b === b && m.a === pa && m.b === pb ? null : 'Im Turnier steht schon ein anderes Ergebnis';
+    if (m.status === 'done') return m.score && m.score.a === a && m.score.b === b && m.a === pa && m.b === pb ? null : 'Im Turnier steht schon ein anderes Ergebnis';
     if (m.status !== 'ready' || m.a !== pa || m.b !== pb) return 'Die Paarung hat sich geändert – Ergebnis bitte von Hand eintragen';
-    if (!Number.isInteger(a) || !Number.isInteger(b) || (t.type !== 'rr' && a === b)) return 'Kein eindeutiger Sieger – Ergebnis bitte von Hand eintragen';
-    const wasFinished = isFinished(t);
+    if (!Number.isInteger(a) || !Number.isInteger(b) || (!drawAllowed(t, m) && a === b)) return 'Kein eindeutiger Sieger – Ergebnis bitte von Hand eintragen';
     const played = (Array.isArray(maps) ? maps : []).slice(0, 9).map((x) => ({ name: str(x.name, 60), a: x.a, b: x.b }))
       .filter((x) => [x.a, x.b].every((n) => Number.isInteger(n) && n >= 0 && n <= 999));
-    t.results[m.id] = { a, b, pa: m.a, pb: m.b, at: new Date().toISOString(), ...(played.length ? { maps: played } : {}) };
-    pruneStale(t);
-    discordAfterResult(t, wasFinished);
-    announceResult(t, view, m.id, false);
-    save(); broadcast('tournament', t.id);
+    commitResult(t, view, m, { a, b, ...(played.length ? { maps: played } : {}) }, 'TMT2', 'Ergebnis aus TMT2:');
     return null;
   },
   // Event beginnt/endet: Voice-Kanäle aller Turniere anlegen bzw. entfernen
@@ -525,7 +654,7 @@ function summary(t) {
   return {
     id: t.id, name: t.name, game: t.game, type: t.type, status: t.status,
     participants: t.participants.length, createdAt: t.createdAt,
-    teamSize: t.teamSize || 1, signup: !!t.signup,
+    teamSize: t.teamSize || 1, signup: !!t.signup, coins: t.coins || 0,
     finished: !!(view && view.finished),
     champion: view && view.champion != null ? t.participants[view.champion] : null,
   };
@@ -607,6 +736,7 @@ async function api(req, res, url) {
       }
       if (b.remindMinutes !== undefined) cur.remindMinutes = num(b.remindMinutes, 0, 1440, 10);
       if (b.mentionPlayers !== undefined) cur.mentionPlayers = !!b.mentionPlayers;
+      if (b.coinBudget !== undefined) cur.coinBudget = num(Math.floor(Number(b.coinBudget)), 0, 99, 0);
       if (b.modules) {
         const e = modules.event.scoped();
         e.modules = { ...eventModules(e) };
@@ -684,6 +814,8 @@ async function api(req, res, url) {
         teamSize: cleanTeamSize(body.teamSize),
         cs2: cleanCs2(body.cs2),
         signup: !!body.signup, // Anmeldung über Discord offen (solange Entwurf)
+        confirm: false, confirmMinutes: 10, groups: cleanGroups(null),
+        ...tournamentExtras(body),
         members: {},
         participants: cleanParticipants(body.participants || []),
         playerIds: {},
@@ -705,12 +837,15 @@ async function api(req, res, url) {
   // /api/tournaments/:id
   const tournamentView = () => {
     if (isAdmin(req)) return t;
-    const { discord, discordStatus, announceError, ...pub } = t;
+    const { discord, discordStatus, announceError, log, referees, ...pub } = t;
     const account = modules.accounts.current(req);
+    // Turnierleiter sehen das Protokoll und dürfen alle Spiele bearbeiten
+    if (account && Access.isReferee(db, account.id, t)) return { ...pub, log: log || [], referee: true, reportableMatches: [], mySides: {} };
     // Eigene Teilnehmerplätze einmal bestimmen; ohne solche (z. B. anonym) entfällt die Spielplanberechnung ganz.
     const own = Access.reportableSides(db, account && account.id, t);
     const view = own.size ? cachedView(t) : null;
-    return { ...pub, reportableMatches: view ? view.matches.filter((m) => own.has(m.a) || own.has(m.b)).map((m) => m.id) : [] };
+    const mine = view ? view.matches.filter((m) => own.has(m.a) || own.has(m.b)) : [];
+    return { ...pub, reportableMatches: mine.map((m) => m.id), mySides: Object.fromEntries(mine.map((m) => [m.id, own.has(m.a) ? 'a' : 'b'])) };
   };
   if (parts.length === 2) {
     if (method === 'GET') {
@@ -731,7 +866,12 @@ async function api(req, res, url) {
       if (name === '') throw new HttpError(400, 'Name fehlt');
       const game = body.game !== undefined ? str(body.game) : undefined;
       const cs2 = body.cs2 !== undefined ? cleanCs2(body.cs2) : undefined;
+      const extras = tournamentExtras(body);
+      // Gruppenaufteilung, Setzplätze und Kosten stehen mit dem Start fest
+      if (t.status !== 'draft') for (const k of ['groups', 'seeds', 'coins']) delete extras[k];
       if (name !== undefined) t.name = name;
+      Object.assign(t, extras);
+      if (extras.confirm === false && t.pending) t.pending = {};
       if (game !== undefined) t.game = game;
       const renames = Object.create(null); // für Discord: Kanäle umbenennen statt neu anlegen (Namen als reine Daten)
       if (names) {
@@ -772,17 +912,23 @@ async function api(req, res, url) {
     requireAdmin(req);
     const body = await readBody(req);
     if (t.participants.length < 2) throw new HttpError(400, 'Mindestens 2 Teilnehmer nötig');
+    if (t.type === 'groups' && t.participants.length < 2 * cleanGroups(t.groups).count)
+      throw new HttpError(400, `Für ${cleanGroups(t.groups).count} Gruppen braucht es mindestens ${2 * cleanGroups(t.groups).count} Teilnehmer`);
     const order = t.participants.map((_, i) => i);
     Access.bindPlayers(db, t, true);
+    // Feste Setzplätze: die ersten N der Liste bleiben, der Rest wird ausgelost
+    const seeds = body.seeds !== undefined ? clampInt(body.seeds, 0, order.length, 0) : Math.min(t.seeds || 0, order.length);
     if (body.shuffle) {
-      for (let i = order.length - 1; i > 0; i--) {
-        const j = crypto.randomInt(i + 1);
+      for (let i = order.length - 1; i > seeds; i--) {
+        const j = seeds + crypto.randomInt(i - seeds + 1);
         [order[i], order[j]] = [order[j], order[i]];
       }
     }
+    t.seeds = seeds;
     t.order = order;
-    t.results = {};
+    t.results = {}; t.pending = {}; t.playing = {}; t.disqualified = [];
     t.status = 'running';
+    logMatch(t, null, body.shuffle ? `Gestartet (Auslosung${seeds ? `, ${seeds} gesetzt` : ''})` : 'Gestartet (Setzliste)', 'Orga');
     announceStart(t);
     save(); broadcast('tournament', t.id);
     return send(res, 200, t);
@@ -797,6 +943,8 @@ async function api(req, res, url) {
       game: t.game, type: t.type, thirdPlace: t.thirdPlace, gfReset: t.gfReset,
       discordEnabled: t.discordEnabled !== false,
       teamSize: t.teamSize || 1, signup: false, cs2: t.cs2 ? { ...t.cs2 } : null,
+      groups: cleanGroups(t.groups), prizes: (t.prizes || []).slice(), coins: t.coins || 0, maxParticipants: t.maxParticipants || 0,
+      seeds: t.seeds || 0, confirm: !!t.confirm, confirmMinutes: t.confirmMinutes || 10, referees: (t.referees || []).slice(),
       members: JSON.parse(JSON.stringify(t.members || {})),
       participants: t.participants.slice(), playerIds: { ...(t.playerIds || {}) },
       order: [], results: {}, status: 'draft',
@@ -821,62 +969,173 @@ async function api(req, res, url) {
     requireAdmin(req);
     const wasFinished = isFinished(t);
     t.order = [];
-    t.results = {};
+    t.results = {}; t.pending = {}; t.playing = {}; t.disqualified = [];
     t.status = 'draft';
+    logMatch(t, null, 'Zurück auf Entwurf', 'Orga');
     discordAfterResult(t, wasFinished);
     save(); broadcast('tournament', t.id);
     return send(res, 200, t);
   }
 
-  // /api/tournaments/:id/matches/:mid
-  if (parts[2] === 'matches' && parts[3]) {
-    // Nur Melden (POST) und Zurücknehmen (DELETE, Admin). Methode und Zugang vor der Spielplanberechnung prüfen,
-    // damit anonyme oder unzulässige Anfragen keine vollständige Berechnung auslösen.
-    if (method !== 'POST' && method !== 'DELETE') throw new HttpError(405, 'Methode nicht erlaubt');
-    const admin = isAdmin(req);
-    if (method === 'DELETE') requireAdmin(req);
-    else if (!admin) { Security.rateLimit(req, 'result', 30, 60000); modules.accounts.requireUser(req); }
+  // /api/tournaments/:id/disqualify   – Teilnehmer disqualifizieren bzw. zurücknehmen (Orga, Turnierleitung)
+  // Offene Spiele des Disqualifizierten gehen kampflos an den Gegner, gespielte Ergebnisse bleiben.
+  if (parts[2] === 'disqualify' && method === 'POST' && !parts[3]) {
+    const me = actor(req, t);
+    if (!me.manage) throw new HttpError(403, 'Nur Orga oder Turnierleitung');
+    const body = await readBody(req);
+    if (t.status !== 'running') throw new HttpError(400, 'Turnier läuft nicht');
+    const idx = Number(body.index);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= t.participants.length) throw new HttpError(400, 'Unbekannter Teilnehmer');
+    const before = Bracket.compute(t);
+    const wasFinished = isFinished(t);
+    const set = new Set(t.disqualified || []);
+    if (body.on === false) set.delete(idx); else set.add(idx);
+    t.disqualified = [...set].sort((x, y) => x - y);
+    pruneStale(t);
+    logMatch(t, null, `${t.participants[idx]} ${body.on === false ? 'nicht mehr disqualifiziert' : 'disqualifiziert'}`, me.name);
+    discordAfterResult(t, wasFinished);
+    const after = Bracket.compute(t);
+    const lines = [`**${Discord.md(t.name)}** – ${body.on === false ? '↩️ Disqualifikation aufgehoben' : '🟥 Disqualifiziert'}: **${who(t, idx)}**`];
+    if (after.finished && !before.finished && after.champion !== undefined) lines.push(`🏆 **${who(t, after.champion)}** gewinnt ${Discord.md(t.name)}!`, ...podiumLines(t, after));
+    else if (!after.finished) {
+      const seen = new Set(Bracket.playable(before).map(matchKey));
+      const next = Bracket.playable(after).filter((x) => !seen.has(matchKey(x)));
+      if (next.length) lines.push('Als Nächstes:', ...next.map((x) => matchLine(t, x)));
+    }
+    announce(t, lines);
+    save(); broadcast('tournament', t.id);
+    return send(res, 200, tournamentView());
+  }
+
+  // /api/tournaments/:id/draw-teams   – Teams aus Einzelanmeldungen auslosen (Entwurf, Orga)
+  // body: { size, balanced } – balanced: nach Setzliste im Schlangenmuster verteilen, sonst zufällig
+  if (parts[2] === 'draw-teams' && method === 'POST') {
+    requireAdmin(req);
+    const body = await readBody(req);
+    if (t.status !== 'draft') throw new HttpError(400, 'Teams lassen sich nur im Entwurf auslosen');
+    if ((t.teamSize || 1) > 1) throw new HttpError(400, 'Das Turnier hat schon Teams – auslosen geht aus Einzelanmeldungen');
+    const size = clampInt(body.size, 2, 20, 2);
+    const players = t.participants.slice();
+    const count = Math.ceil(players.length / size);
+    if (count < 2) throw new HttpError(400, `Für Teams à ${size} braucht es mindestens ${size + 1} Spieler`);
+    if (!body.balanced) {
+      for (let i = players.length - 1; i > 0; i--) { const j = crypto.randomInt(i + 1); [players[i], players[j]] = [players[j], players[i]]; }
+    }
+    const teams = Bracket.groupSplit(players, count); // Schlangenmuster: gleich große, ausgeglichene Teams
+    const names = teams.map((list, i) => { const n = list.join(' & '); return n.length <= 60 ? n : `Team ${i + 1}`; });
+    const bound = t.playerIds || {};
+    t.members = Object.fromEntries(teams.map((list, i) => [names[i], list.map((p) => (Object.hasOwn(bound, p) ? bound[p] : null)).filter(Boolean)]));
+    t.teamSize = size;
+    t.participants = names;
+    t.playerIds = {};
+    Access.bindPlayers(db, t);
+    logMatch(t, null, `${count} Teams à bis zu ${size} ausgelost${body.balanced ? ' (nach Setzliste)' : ''}`, 'Orga');
+    if (t.discordEnabled !== false) discordSync(t);
+    save(); broadcast('tournament', t.id);
+    return send(res, 200, t);
+  }
+
+  // /api/tournaments/:id/matches/:mid[/confirm|/dispute|/forfeit|/playing]
+  if (parts[2] === 'matches' && parts[3] && parts.length <= 5) {
+    // Methode und Zugang vor der Spielplanberechnung prüfen, damit anonyme oder unzulässige Anfragen
+    // keine vollständige Berechnung auslösen.
+    const action = parts[4] || '';
+    if (!['', 'confirm', 'dispute', 'forfeit', 'playing'].includes(action)) throw new HttpError(404, 'Nicht gefunden');
+    if (action ? method !== 'POST' : (method !== 'POST' && method !== 'DELETE')) throw new HttpError(405, 'Methode nicht erlaubt');
+    const me = actor(req, t);
+    if (!me.admin) { Security.rateLimit(req, 'result', 30, 60000); modules.accounts.requireUser(req); }
+    if ((method === 'DELETE' || action === 'forfeit') && !me.manage) throw new HttpError(401, 'Nur Orga oder Turnierleitung');
     // Erst den vollständigen Body abwarten, danach den aktuellen Zustand atomar prüfen/ändern.
     const body = method === 'POST' ? await readBody(req) : null;
     if (t.status !== 'running') throw new HttpError(400, 'Turnier läuft nicht');
     const view = Bracket.compute(t);
     const m = view.matches.find((x) => x.id === parts[3]);
     if (!m) throw new HttpError(404, 'Spiel nicht gefunden');
+    const side = me.manage ? null : Access.sideOf(db, me.account.id, t, m);
+    if (!me.manage && !side) throw new HttpError(403, 'Nur beteiligte Spieler oder Teammitglieder dürfen das Ergebnis eintragen');
 
     if (method === 'DELETE') {
-      requireAdmin(req);
       if (!t.results[m.id]) throw new HttpError(400, 'Für dieses Spiel gibt es kein Ergebnis');
       const wasFinished = isFinished(t);
       delete t.results[m.id];
       pruneStale(t);
+      logMatch(t, m, 'Ergebnis gelöscht', me.name);
       discordAfterResult(t, wasFinished);
       announce(t, [`**${Discord.md(t.name)}** – ↩️ Ergebnis zurückgenommen: ${Discord.md(m.label)}: ${who(t, m.a)} vs ${who(t, m.b)}`]);
       save(); broadcast('tournament', t.id);
-      return send(res, 200, t);
+      return send(res, 200, me.admin ? t : tournamentView());
     }
 
-    if (method === 'POST') {
-      if (!admin) {
-        const account = modules.accounts.requireUser(req);
-        if (!Access.mayReport(db, account.id, t, m)) throw new HttpError(403, 'Nur beteiligte Spieler oder Teammitglieder dürfen das Ergebnis eintragen');
-      }
-      if (m.status === 'done' && !admin)
-        throw new HttpError(409, 'Für dieses Spiel ist bereits ein Ergebnis eingetragen. Korrekturen nur durch die Turnierleitung.');
-      if (m.status !== 'ready' && m.status !== 'done') throw new HttpError(400, 'Spiel ist noch nicht bereit');
-      const score = (v) => ['number', 'string'].includes(typeof v) ? Number(v) : NaN;
-      const a = score(body.a), b = score(body.b);
-      if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a > 9999 || b > 9999)
-        throw new HttpError(400, 'Bitte ganze Zahlen ≥ 0 eingeben');
-      if (t.type !== 'rr' && a === b) throw new HttpError(400, 'Im K.-o.-System ist kein Unentschieden möglich');
-      if (m.status === 'done' && m.score.a === a && m.score.b === b) return send(res, 200, tournamentView()); // unverändert
-      const wasFinished = isFinished(t);
-      t.results[m.id] = { a, b, pa: m.a, pb: m.b, at: new Date().toISOString() };
-      pruneStale(t); // geänderter Sieger -> nachfolgende Ergebnisse ungültig
-      discordAfterResult(t, wasFinished);
-      announceResult(t, view, m.id, m.status === 'done');
+    if (action === 'playing') {
+      if (m.status !== 'ready') throw new HttpError(400, 'Spiel ist nicht spielbereit');
+      t.playing = t.playing || {};
+      if (body.on === false) delete t.playing[m.id];
+      else t.playing[m.id] = { pa: m.a, pb: m.b, at: new Date().toISOString() };
+      logMatch(t, m, body.on === false ? 'Läuft nicht mehr' : 'Spiel läuft', me.name);
       save(); broadcast('tournament', t.id);
       return send(res, 200, tournamentView());
     }
+
+    if (action === 'forfeit') {
+      if (m.status !== 'ready' && m.status !== 'done') throw new HttpError(400, 'Spiel ist noch nicht bereit');
+      if (body.side !== 'a' && body.side !== 'b') throw new HttpError(400, 'Wer hat verloren? side: "a" oder "b"');
+      if (m.status === 'done' && m.wo === body.side && !m.dq) return send(res, 200, tournamentView());
+      commitResult(t, view, m, { a: 0, b: 0, wo: body.side }, me.name, 'Gewertet:');
+      return send(res, 200, tournamentView());
+    }
+
+    const p = t.pending && t.pending[m.id];
+    const pend = p && p.pa === m.a && p.pb === m.b ? p : null;
+    if (action === 'confirm' || action === 'dispute') {
+      if (m.status !== 'ready' || !pend) throw new HttpError(400, 'Für dieses Spiel wartet keine Meldung auf Bestätigung');
+      if (!me.manage && pend.by === side) throw new HttpError(403, 'Bestätigen muss die Gegenseite');
+      if (!me.manage && pend.disputed) throw new HttpError(409, 'Das Ergebnis ist strittig – die Turnierleitung entscheidet.');
+      if (action === 'confirm') {
+        commitResult(t, view, m, { a: pend.a, b: pend.b }, me.name, 'Bestätigt:');
+        return send(res, 200, tournamentView());
+      }
+      pend.disputed = true;
+      logMatch(t, m, `Meldung ${pend.a}:${pend.b} bestritten`, me.name);
+      announce(t, [`**${Discord.md(t.name)}** – ⚠️ Ergebnis bestritten: ${Discord.md(m.label)}: ${who(t, m.a)} vs ${who(t, m.b)} – die Turnierleitung entscheidet.`]);
+      save(); broadcast('tournament', t.id);
+      return send(res, 200, tournamentView());
+    }
+
+    // Ergebnis melden bzw. (Orga, Turnierleitung) eintragen oder korrigieren
+    if (m.status === 'done' && !me.manage)
+      throw new HttpError(409, 'Für dieses Spiel ist bereits ein Ergebnis eingetragen. Korrekturen nur durch die Turnierleitung.');
+    if (m.status !== 'ready' && m.status !== 'done') throw new HttpError(400, 'Spiel ist noch nicht bereit');
+    const score = (v) => ['number', 'string'].includes(typeof v) ? Number(v) : NaN;
+    const a = score(body.a), b = score(body.b);
+    if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a > 9999 || b > 9999)
+      throw new HttpError(400, 'Bitte ganze Zahlen ≥ 0 eingeben');
+    if (!drawAllowed(t, m) && a === b) throw new HttpError(400, 'Im K.-o.-System ist kein Unentschieden möglich');
+    if (m.status === 'done' && m.score && m.score.a === a && m.score.b === b) return send(res, 200, tournamentView()); // unverändert
+    if (me.manage || !t.confirm) {
+      commitResult(t, view, m, { a, b }, me.name, m.status === 'done' ? 'Korrigiert:' : me.manage ? 'Eingetragen:' : 'Gemeldet:');
+      return send(res, 200, tournamentView());
+    }
+    // Bestätigung durch die Gegenseite: gleiche Meldung der Gegenseite gilt sofort, abweichende ist ein Streitfall
+    if (pend && pend.by !== side) {
+      if (pend.a === a && pend.b === b) {
+        commitResult(t, view, m, { a, b }, me.name, 'Beide Seiten gemeldet:');
+        return send(res, 200, tournamentView());
+      }
+      pend.disputed = true;
+      pend.counter = { a, b };
+      logMatch(t, m, `Abweichende Meldung ${a}:${b} (vorher ${pend.a}:${pend.b})`, me.name);
+      announce(t, [`**${Discord.md(t.name)}** – ⚠️ Ergebnis strittig: ${Discord.md(m.label)}: ${who(t, m.a)} vs ${who(t, m.b)} (${pend.a}:${pend.b} oder ${a}:${b}) – die Turnierleitung entscheidet.`]);
+      save(); broadcast('tournament', t.id);
+      return send(res, 200, tournamentView());
+    }
+    if (pend && pend.disputed) throw new HttpError(409, 'Das Ergebnis ist strittig – die Turnierleitung entscheidet.');
+    t.pending = t.pending || {};
+    t.pending[m.id] = { a, b, pa: m.a, pb: m.b, by: side, at: new Date().toISOString() };
+    logMatch(t, m, `Gemeldet ${a}:${b}, wartet auf Bestätigung`, me.name);
+    const other = side === 'a' ? m.b : m.a;
+    announce(t, [`**${Discord.md(t.name)}** – 📝 ${Discord.md(m.label)}: ${who(t, m.a)} ${a} : ${b} ${who(t, m.b)} gemeldet. **${who(t, other)}**${pings(t, other)} bitte bestätigen (sonst gilt es in ${t.confirmMinutes || 10} Minuten).`]);
+    save(); broadcast('tournament', t.id);
+    return send(res, 200, tournamentView());
   }
 
   throw new HttpError(404, 'Nicht gefunden');

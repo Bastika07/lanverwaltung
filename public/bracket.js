@@ -1,6 +1,7 @@
 // Gemeinsame Turnierlogik – wird vom Server (Validierung) und vom Browser (Darstellung) genutzt.
 // Alles wird deterministisch aus { participants, order, results } berechnet, dadurch
 // "wandern" Gewinner automatisch weiter, sobald ein Ergebnis eingetragen wird.
+// Dazu kommen Disqualifikationen (disqualified), offene Meldungen (pending) und laufende Spiele (playing).
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else root.Bracket = factory();
@@ -34,14 +35,26 @@
     return 'Runde ' + (round + 1);
   }
 
+  const GROUP_NAMES = 'ABCDEFGHIJKLMNOP';
+
   function newMatch(id, round, index) {
     return { id, round, index, a: undefined, b: undefined, score: null, winner: undefined, loser: undefined, status: 'pending' };
   }
 
+  // Zustand, gegen den Spiele aufgelöst werden
+  function context(t) {
+    return {
+      results: t.results || {}, pending: t.pending || {}, playing: t.playing || {},
+      dq: new Set((t.disqualified || []).filter(Number.isInteger)),
+    };
+  }
+  const fits = (x, m) => !!x && x.pa === m.a && x.pb === m.b;
+
   // Seitenwerte: Teilnehmer-Index = bekannt, undefined = steht noch nicht fest, null = Freilos.
   // Freilose werden automatisch aufgelöst: der Gegner kommt kampflos weiter, es gibt keinen Verlierer.
   // Ein Ergebnis zählt nur, wenn es zu den aktuellen Paarungen passt (sonst ist es veraltet).
-  function resolve(m, results) {
+  // Kampflos (wo = Seite, die verliert): von der Orga gewertet oder weil ein Teilnehmer disqualifiziert ist.
+  function resolve(m, ctx) {
     if (m.a === null && m.b === null) {
       m.status = 'bye'; m.winner = null; m.loser = null;
     } else if (m.a === null && m.b !== undefined) {
@@ -50,15 +63,35 @@
       m.status = 'bye'; m.winner = m.a; m.loser = null;
     } else if (m.a !== undefined && m.b !== undefined) {
       m.status = 'ready';
-      const r = results[m.id];
-      if (!r || r.pa !== m.a || r.pb !== m.b) return m;
-      m.score = { a: r.a, b: r.b };
-      if (Array.isArray(r.maps)) m.maps = r.maps; // Rundenstände je Map (aus TMT2)
-      m.status = 'done';
-      if (r.a > r.b) { m.winner = m.a; m.loser = m.b; }
-      else if (r.b > r.a) { m.winner = m.b; m.loser = m.a; }
-      else m.draw = true;
+      const r = ctx.results[m.id];
+      const dqA = ctx.dq.has(m.a), dqB = ctx.dq.has(m.b);
+      if (fits(r, m)) {
+        m.status = 'done';
+        if (Array.isArray(r.maps)) m.maps = r.maps; // Rundenstände je Map (aus TMT2)
+        if (r.wo === 'a' || r.wo === 'b') return forfeit(m, r.wo, false);
+        m.score = { a: r.a, b: r.b };
+        if (r.a > r.b) { m.winner = m.a; m.loser = m.b; }
+        else if (r.b > r.a) { m.winner = m.b; m.loser = m.a; }
+        else m.draw = true;
+      } else if (dqA && dqB) {
+        m.status = 'done'; m.wo = 'both'; m.dq = true; m.winner = null; m.loser = null;
+      } else if (dqA || dqB) {
+        m.status = 'done';
+        forfeit(m, dqA ? 'a' : 'b', true);
+      } else {
+        const p = ctx.pending[m.id];
+        if (fits(p, m)) m.pending = { a: p.a, b: p.b, by: p.by, at: p.at, disputed: !!p.disputed };
+        const g = ctx.playing[m.id];
+        if (fits(g, m)) { m.playing = true; m.playingSince = g.at; }
+      }
     }
+    return m;
+  }
+
+  function forfeit(m, side, dq) {
+    m.wo = side; m.dq = dq;
+    m.winner = side === 'a' ? m.b : m.a;
+    m.loser = side === 'a' ? m.a : m.b;
     return m;
   }
 
@@ -68,17 +101,17 @@
     return { size, slots: seedOrder(size).map((s) => (s <= n ? t.order[s - 1] : null)) };
   }
 
-  // Gewinnerbaum (auch für Single Elimination)
-  function buildWinners(slots, size, results) {
+  // Gewinnerbaum (auch für Single Elimination). hints: Platzhaltertexte für die erste Runde (Gruppenphase).
+  function buildWinners(slots, size, ctx, prefix = '', hints = []) {
     const totalRounds = Math.log2(size);
     const rounds = [];
     for (let r = 0; r < totalRounds; r++) {
       const list = [];
       for (let i = 0; i < size / Math.pow(2, r + 1); i++) {
-        const m = newMatch('r' + r + 'm' + i, r, i);
-        if (r === 0) { m.a = slots[2 * i]; m.b = slots[2 * i + 1]; }
+        const m = newMatch(prefix + 'r' + r + 'm' + i, r, i);
+        if (r === 0) { m.a = slots[2 * i]; m.b = slots[2 * i + 1]; m.hintA = hints[2 * i]; m.hintB = hints[2 * i + 1]; }
         else { m.a = rounds[r - 1][2 * i].winner; m.b = rounds[r - 1][2 * i + 1].winner; }
-        list.push(resolve(m, results));
+        list.push(resolve(m, ctx));
       }
       rounds.push(list);
     }
@@ -87,42 +120,59 @@
 
   const real = (p) => p !== undefined && p !== null;
 
-  // Single Elimination
-  function computeKO(t) {
-    const { size, slots } = startSlots(t);
+  // Single Elimination. opts: vorgegebene Startplätze (Gruppenphase) mit Präfix für die Spiel-IDs.
+  function computeKO(t, opts = {}) {
+    const { size, slots } = opts.slots ? opts : startSlots(t);
+    const prefix = opts.prefix || '';
     const totalRounds = Math.log2(size);
-    const results = t.results || {};
-    const rounds = buildWinners(slots, size, results);
+    const ctx = context(t);
+    const rounds = buildWinners(slots, size, ctx, prefix, opts.hints);
 
     let third = null;
     if (t.thirdPlace && totalRounds >= 2) {
       const semis = rounds[totalRounds - 2];
-      third = newMatch('p3', totalRounds - 1, 1);
+      third = newMatch(prefix + 'p3', totalRounds - 1, 1);
       third.a = semis[0].loser;
       third.b = semis[1].loser;
-      resolve(third, results);
+      resolve(third, ctx);
     }
 
     const final = rounds[totalRounds - 1][0];
     const placements = [];
-    if (final.status === 'done') {
-      placements.push({ place: 1, p: final.winner }, { place: 2, p: final.loser });
+    if (final.status === 'done' && real(final.winner)) {
+      placements.push({ place: 1, p: final.winner });
+      if (real(final.loser)) placements.push({ place: 2, p: final.loser });
       if (third && third.status === 'done') {
-        placements.push({ place: 3, p: third.winner }, { place: 4, p: third.loser });
+        if (real(third.winner)) placements.push({ place: 3, p: third.winner });
+        if (real(third.loser)) placements.push({ place: 4, p: third.loser });
       } else if (third && real(third.winner)) {
         placements.push({ place: 3, p: third.winner });
       } else if (!third && totalRounds >= 2) {
         for (const s of rounds[totalRounds - 2]) if (real(s.loser)) placements.push({ place: 3, p: s.loser });
       }
     }
-    const finished = final.status === 'done' && (!third || third.status !== 'ready');
+    const decided = (final.status === 'done' || final.status === 'bye') && final.winner !== undefined;
+    const finished = decided && (!third || third.status !== 'ready');
+
+    // Vollständiger Endstand: Wer in Runde r ausscheidet, teilt sich Platz size/2^(r+1)+1
+    const ranking = [];
+    if (finished) {
+      const placed = new Set(placements.map((x) => x.p));
+      ranking.push(...placements);
+      for (let r = totalRounds - 2; r >= 0; r--) {
+        for (const m of rounds[r]) {
+          if (real(m.loser) && !placed.has(m.loser)) { ranking.push({ place: size / Math.pow(2, r + 1) + 1, p: m.loser }); placed.add(m.loser); }
+        }
+      }
+    }
 
     return {
       type: 'ko', size, totalRounds,
       roundNames: rounds.map((_, r) => roundName(r, totalRounds)),
       rounds, third, matches: rounds.flat().concat(third ? [third] : []),
-      champion: finished ? final.winner : undefined,
+      champion: finished && real(final.winner) ? final.winner : undefined,
       placements: finished ? placements : [],
+      ranking,
       finished,
     };
   }
@@ -131,8 +181,8 @@
   function computeDE(t) {
     const { size, slots } = startSlots(t);
     const k = Math.log2(size);
-    const results = t.results || {};
-    const wb = buildWinners(slots, size, results);
+    const ctx = context(t);
+    const wb = buildWinners(slots, size, ctx);
     const wbNames = wb.map((_, r) => (r === k - 1 ? 'Finale Gewinnerrunde' : 'Gewinnerrunde ' + (r + 1)));
 
     // Verliererbaum: 2(k-1) Runden. Gerade Runden spielen Verliererbaum-Gewinner gegeneinander,
@@ -158,7 +208,7 @@
         } else {
           m.a = lb[r - 1][2 * i].winner; m.b = lb[r - 1][2 * i + 1].winner;
         }
-        list.push(resolve(m, results));
+        list.push(resolve(m, ctx));
       }
       lb.push(list);
     }
@@ -171,14 +221,14 @@
     gf1.b = lbFinal ? lbFinal.winner : wbFinal.loser;
     gf1.hintA = 'Sieger Gewinnerrunde';
     gf1.hintB = 'Sieger Verliererrunde';
-    resolve(gf1, results);
+    resolve(gf1, ctx);
 
     let gf2 = null;
     if (t.gfReset !== false) {
       gf2 = newMatch('gf2', 1, 0);
       if (gf1.status === 'done') {
-        if (gf1.winner === gf1.a) gf2.status = 'skip';
-        else { gf2.a = gf1.a; gf2.b = gf1.b; resolve(gf2, results); }
+        if (gf1.winner === gf1.a || gf1.wo) gf2.status = 'skip'; // kampflos: keine zweite Chance
+        else { gf2.a = gf1.a; gf2.b = gf1.b; resolve(gf2, ctx); }
       }
     }
 
@@ -189,10 +239,21 @@
     const finished = champion !== undefined;
 
     const placements = [];
-    if (finished) {
+    if (finished && real(champion)) {
       placements.push({ place: 1, p: champion });
       if (real(second)) placements.push({ place: 2, p: second });
       if (lbFinal && real(lbFinal.loser)) placements.push({ place: 3, p: lbFinal.loser });
+    }
+    // Endstand: Ausgeschiedene im Verliererbaum, spätere Runden zuerst
+    const ranking = [];
+    if (finished) {
+      const placed = new Set(placements.map((x) => x.p));
+      ranking.push(...placements);
+      let place = 3 + (lbFinal ? 1 : 0);
+      for (let r = lbRounds - 2; r >= 0; r--) {
+        for (const m of lb[r]) if (real(m.loser) && !placed.has(m.loser)) { ranking.push({ place, p: m.loser }); placed.add(m.loser); }
+        place += lb[r].length;
+      }
     }
 
     const finals = [gf1].concat(gf2 ? [gf2] : []);
@@ -202,18 +263,18 @@
       losers: lb, loserNames: lbNames,
       finals, finalNames: gf2 ? ['Grand Final', 'Grand Final – Reset'] : ['Grand Final'],
       matches: wb.flat().concat(lb.flat(), finals),
-      champion: finished ? champion : undefined,
-      placements,
+      champion: finished && real(champion) ? champion : undefined,
+      placements, ranking,
       finished,
     };
   }
 
-  // Jeder gegen jeden (Rundenturnier, Kreis-Methode)
-  function computeRR(t) {
+  // Jeder gegen jeden (Rundenturnier, Kreis-Methode). prefix: Spiel-IDs einer Gruppe.
+  function computeRR(t, prefix = '') {
     const ids = t.order.slice();
     if (ids.length % 2 === 1) ids.push(null);
     const n = ids.length;
-    const results = t.results || {};
+    const ctx = context(t);
     const rounds = [];
     let arr = ids.slice();
     for (let r = 0; r < n - 1; r++) {
@@ -222,9 +283,9 @@
         let a = arr[i], b = arr[n - 1 - i];
         if (a === null || b === null) continue;
         if (r % 2 === 1 && i === 0) { const x = a; a = b; b = x; }
-        const m = newMatch('g' + r + 'm' + i, r, list.length);
+        const m = newMatch(prefix + 'g' + r + 'm' + i, r, list.length);
         m.a = a; m.b = b;
-        resolve(m, results);
+        resolve(m, ctx);
         list.push(m);
       }
       rounds.push(list);
@@ -233,41 +294,125 @@
     const matches = rounds.flat();
 
     const table = {};
-    for (const p of t.order) table[p] = { p, played: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 };
+    for (const p of t.order) table[p] = { p, played: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0, dq: ctx.dq.has(p) };
     for (const m of matches) {
-      if (m.status !== 'done') continue;
+      if (m.status !== 'done' || m.wo === 'both') continue;
       const A = table[m.a], B = table[m.b];
       A.played++; B.played++;
-      A.gf += m.score.a; A.ga += m.score.b;
-      B.gf += m.score.b; B.ga += m.score.a;
+      if (m.score) {
+        A.gf += m.score.a; A.ga += m.score.b;
+        B.gf += m.score.b; B.ga += m.score.a;
+      }
       if (m.draw) { A.d++; B.d++; A.pts += 1; B.pts += 1; }
       else if (m.winner === m.a) { A.w++; B.l++; A.pts += 3; }
       else { B.w++; A.l++; B.pts += 3; }
     }
     const names = t.participants;
     const standings = Object.values(table).sort((x, y) =>
-      y.pts - x.pts || (y.gf - y.ga) - (x.gf - x.ga) || y.gf - x.gf || String(names[x.p]).localeCompare(String(names[y.p])));
+      x.dq - y.dq || y.pts - x.pts || (y.gf - y.ga) - (x.gf - x.ga) || y.gf - x.gf || String(names[x.p]).localeCompare(String(names[y.p])));
     standings.forEach((s, i) => { s.place = i + 1; });
 
-    const finished = matches.length > 0 && matches.every((m) => m.status === 'done');
+    const finished = matches.every((m) => m.status === 'done') && (matches.length > 0 || t.order.length === 1);
     return {
       type: 'rr', rounds, matches,
       roundNames: rounds.map((_, r) => 'Spieltag ' + (r + 1)),
       standings, finished,
       champion: finished ? standings[0].p : undefined,
       placements: finished ? standings.slice(0, 3).map((s) => ({ place: s.place, p: s.p })) : [],
+      ranking: finished ? standings.map((s) => ({ place: s.place, p: s.p })) : [],
     };
   }
 
-  // Rundenname an jedes Spiel hängen (für Listen und Ansagen)
-  function addLabels(view) {
-    const set = (rounds, names) => rounds.forEach((list, r) => list.forEach((m) => { m.label = names[r]; }));
-    set(view.rounds, view.roundNames);
-    if (view.third) view.third.label = 'Spiel um Platz 3';
-    if (view.type === 'de') {
-      set(view.losers, view.loserNames);
-      view.finals.forEach((m, i) => { m.label = view.finalNames[i]; });
+  // Gruppenphase und K.-o.-Runde. t.groups = { count, advance }.
+  // Verteilung nach Setzliste im Schlangenmuster (A B C D D C B A …), damit jede Gruppe gleich stark ist.
+  function groupSplit(order, count) {
+    const groups = Array.from({ length: count }, () => []);
+    order.forEach((p, i) => {
+      const row = Math.floor(i / count), col = i % count;
+      groups[row % 2 === 0 ? col : count - 1 - col].push(p);
+    });
+    return groups;
+  }
+
+  // Setzplätze der K.-o.-Runde: Gruppenerste 1…G. Bei zwei Weiterkommenden trifft der Erste einer Gruppe
+  // auf den Zweiten der Gruppe, die eine halbe Runde weiter liegt (Gruppenzweiter landet in der anderen Baumhälfte).
+  function qualifierSeeds(count, advance) {
+    const seeds = [];
+    for (let g = 0; g < count; g++) seeds[g] = { g, place: 0 };
+    if (advance === 2) {
+      for (let s = 1; s <= count; s++) seeds[2 * count - s] = { g: (s - 1 + Math.floor(count / 2)) % count, place: 1 };
+    } else {
+      for (let place = 1; place < advance; place++) {
+        for (let i = 0; i < count; i++) seeds[place * count + i] = { g: place % 2 ? count - 1 - i : i, place };
+      }
     }
+    return seeds;
+  }
+
+  function computeGroups(t) {
+    const n = t.order.length;
+    const cfg = t.groups || {};
+    const count = Math.min(Math.max(Math.floor(cfg.count) || 2, 1), Math.max(1, Math.floor(n / 2)), GROUP_NAMES.length);
+    const parts = groupSplit(t.order, count);
+    const advance = Math.min(Math.max(Math.floor(cfg.advance) || 2, 1), Math.min(...parts.map((p) => p.length)));
+    const groups = parts.map((ids, g) => {
+      const v = computeRR({ ...t, order: ids }, 'G' + g);
+      v.name = 'Gruppe ' + GROUP_NAMES[g];
+      v.advance = advance;
+      return v;
+    });
+
+    const seeds = qualifierSeeds(count, advance);
+    const q = seeds.length;
+    const size = Math.max(2, nextPow2(q));
+    const order = seedOrder(size);
+    const slots = [], hints = [];
+    for (const s of order) {
+      if (s > q) { slots.push(null); hints.push(undefined); continue; }
+      const { g, place } = seeds[s - 1];
+      slots.push(groups[g].finished ? groups[g].standings[place].p : undefined);
+      hints.push((place + 1) + '. ' + groups[g].name);
+    }
+    const ko = computeKO(t, { size, slots, hints, prefix: 'k' });
+
+    // Endstand: K.-o.-Runde, danach die Ausgeschiedenen der Gruppen (nach Gruppenplatz, Punkten, Differenz)
+    let ranking = [];
+    if (ko.finished) {
+      ranking = ko.ranking.slice();
+      const out = groups.flatMap((gv) => gv.standings.slice(advance)).sort((x, y) =>
+        x.place - y.place || y.pts - x.pts || (y.gf - y.ga) - (x.gf - x.ga) || y.gf - x.gf);
+      out.forEach((s, i) => ranking.push({ place: q + 1 + i, p: s.p }));
+    }
+
+    return {
+      type: 'groups', groups, ko, advance,
+      // Für Darstellung und Spiele-Listen wie ein K.-o.-Baum
+      rounds: ko.rounds, roundNames: ko.roundNames, third: ko.third, totalRounds: ko.totalRounds, size: ko.size,
+      matches: groups.flatMap((gv) => gv.matches).concat(ko.matches),
+      champion: ko.champion, placements: ko.placements, ranking,
+      finished: ko.finished,
+    };
+  }
+
+  // Rundenname und Rundenschlüssel an jedes Spiel hängen (für Listen, Ansagen und Rundenzeiten)
+  function addLabels(view) {
+    const list = [];
+    const set = (rounds, names, key, pre = '') => rounds.forEach((ms, r) => {
+      if (!list.some((x) => x.key === key + r)) list.push({ key: key + r, label: names[r] });
+      ms.forEach((m) => { m.label = pre + names[r]; m.roundKey = key + r; });
+    });
+    if (view.type === 'groups') {
+      view.groups.forEach((g) => g.rounds.forEach((ms, r) => ms.forEach((m) => { m.label = g.name + ' · ' + g.roundNames[r]; m.roundKey = 'gd' + r; })));
+      const days = Math.max(0, ...view.groups.map((g) => g.rounds.length));
+      for (let r = 0; r < days; r++) list.push({ key: 'gd' + r, label: 'Gruppen · Spieltag ' + (r + 1) });
+      set(view.rounds, view.roundNames, 'kr');
+    } else set(view.rounds, view.roundNames, view.type === 'rr' ? 'g' : view.type === 'de' ? 'w' : 'r');
+    if (view.third) { view.third.label = 'Spiel um Platz 3'; view.third.roundKey = view.type === 'groups' ? 'kp3' : 'p3'; list.push({ key: view.third.roundKey, label: 'Spiel um Platz 3' }); }
+    if (view.type === 'de') {
+      set(view.losers, view.loserNames, 'l');
+      view.finals.forEach((m, i) => { m.label = view.finalNames[i]; m.roundKey = 'gf' + (i + 1); list.push({ key: m.roundKey, label: m.label }); });
+    }
+    view.roundList = list;
     return view;
   }
 
@@ -275,19 +420,24 @@
     if (!t.order || t.order.length < 2) return null;
     if (t.type === 'rr') return addLabels(computeRR(t));
     if (t.type === 'de') return addLabels(computeDE(t));
+    if (t.type === 'groups') return addLabels(computeGroups(t));
     return addLabels(computeKO(t));
   }
+
+  // Aktueller Spieltag eines Rundenturniers
+  const currentDay = (rr) => {
+    const current = rr.rounds.find((list) => list.some((m) => m.status !== 'done'));
+    return current ? current.filter((m) => m.status === 'ready') : [];
+  };
 
   // Spiele, die jetzt gespielt werden können. Bei "Jeder gegen jeden" nur der aktuelle
   // Spieltag, damit nicht alle Paarungen auf einmal erscheinen.
   function playable(view) {
     if (!view || view.finished) return [];
-    if (view.type === 'rr') {
-      const current = view.rounds.find((list) => list.some((m) => m.status !== 'done'));
-      return current ? current.filter((m) => m.status === 'ready') : [];
-    }
+    if (view.type === 'rr') return currentDay(view);
+    if (view.type === 'groups') return view.groups.flatMap(currentDay).concat(view.ko.matches.filter((m) => m.status === 'ready'));
     return view.matches.filter((m) => m.status === 'ready');
   }
 
-  return { compute, playable, nextPow2, seedOrder };
+  return { compute, playable, nextPow2, seedOrder, groupSplit, GROUP_NAMES };
 });
