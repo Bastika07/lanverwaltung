@@ -1,6 +1,6 @@
 'use strict';
 /* global api, esc, state, on, views, beamerSlides, Bracket, Sched, schedItem, loadFull, nowPlaying, nowItem,
-   podium, typeLabel, renderKO, renderDE, renderRR, render, unlockAudio, Announce, speak, pname */
+   podium, typeLabel, renderKO, renderDE, renderRR, render, unlockAudio, Announce, speak, pname, soundMode, nextSoundMode, soundReady, SOUND_MODES */
 // Beamer-Ansicht: Vollbild-Infoscreen. Wechselt durch Folien der aktiven Module
 // (Turniere, Programm, Infos, Sitzplan); Durchsagen legen sich darüber.
 
@@ -11,11 +11,23 @@ function speakNewMatches(now) {
   const keys = new Map(now.map((x) => [`${x.t.id}:${x.m.id}:${x.m.a}:${x.m.b}`, x]));
   const fresh = beamer.seen ? [...keys].filter(([k]) => !beamer.seen.has(k)).map(([, x]) => x) : [];
   beamer.seen = new Set(keys.keys());
-  if (!state.settings.speakMatches || !fresh.length) return;
+  if (!state.settings.speakMatches || soundMode() !== 'speak' || !fresh.length) return;
   if (fresh.length > 3) { speak(`${fresh.length} neue Spiele sind dran. Bitte auf den Beamer schauen.`); return; }
   for (const { t, m } of fresh) speak(`${t.name}, ${m.label}: ${pname(t, m.a)} gegen ${pname(t, m.b)}. Ihr seid dran.`);
 }
 window.addEventListener('hashchange', () => { if (!location.hash.startsWith('#/beamer')) beamer.seen = null; });
+
+// Ton-Knopf: vor dem Freigabe-Klick deutlich sichtbar, danach zeigt er die Stufe und schaltet sie reihum
+function beamerSoundButton() {
+  const btn = document.getElementById('beamerSound');
+  if (!btn) return;
+  const [icon, label] = soundReady() ? SOUND_MODES[soundMode()] : ['🔇', 'Ton aktivieren'];
+  btn.innerHTML = `${icon} <span>${label}</span>`;
+  btn.title = soundReady() ? 'Klicken schaltet um: Ton aus → nur Gong → Gong und vorlesen' : 'Browser spielen Ton erst nach einem Klick ab';
+  btn.closest('.beamer-tools').classList.toggle('attention', !soundReady());
+}
+// Freigeben und danach den Knopf aktualisieren (resume() wirkt erst asynchron)
+const beamerUnlock = () => { unlockAudio(); Promise.resolve(Announce.audio && Announce.audio.resume()).then(beamerSoundButton, beamerSoundButton); };
 
 function stopBeamer() {
   clearInterval(beamer.timer);
@@ -61,7 +73,7 @@ views.beamer = {
     const [slides, side] = await Promise.all([beamerSlideList(pinnedId), beamerSidebar()]);
     const name = state.settings.eventName || 'LAN-Party';
     const tools = `<div class="beamer-tools">
-      <button id="beamerSound" title="Ton und Sprachausgabe für Durchsagen aktivieren">${Announce.audio && Announce.audio.state === 'running' ? '🔔' : '🔕'}</button>
+      <button id="beamerSound"></button>
       <button id="beamerFull" title="Vollbild">⛶</button><a class="btn" href="#/" title="Beamer-Ansicht verlassen">✕</a></div>`;
 
     if (!slides.length) {
@@ -96,13 +108,14 @@ views.beamer = {
     }
 
     document.getElementById('beamerFull').onclick = () => {
-      unlockAudio();
+      beamerUnlock();
       if (document.fullscreenElement) document.exitFullscreen();
       else document.documentElement.requestFullscreen?.();
     };
-    document.getElementById('beamerSound').onclick = (e) => {
-      if (unlockAudio()) e.currentTarget.textContent = '🔔';
+    document.getElementById('beamerSound').onclick = () => {
+      if (soundReady()) { nextSoundMode(); beamerSoundButton(); } else beamerUnlock();
     };
+    beamerSoundButton();
     // Rotation unabhängig von Live-Updates, damit häufige Änderungen den Wechsel nicht aufhalten
     if (!pinnedId && slides.length > 1) {
       if (!beamer.timer) beamer.timer = setInterval(() => { beamer.idx++; render(); }, (state.settings.beamerSeconds || 20) * 1000);

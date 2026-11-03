@@ -50,6 +50,16 @@ function speak(text) {
   speechSynthesis.speak(u);
 }
 
+// Ton-Stufe des Beamers, je Rechner gemerkt (dort stehen die Lautsprecher): aus, nur Gong, Gong und vorlesen
+const SOUND_MODES = { off: ['🔕', 'Ton aus'], gong: ['🔔', 'Nur Gong'], speak: ['🗣️', 'Gong und vorlesen'] };
+function soundMode() { const m = localStorageGet('beamerSound'); return SOUND_MODES[m] ? m : 'speak'; }
+function nextSoundMode() {
+  const keys = Object.keys(SOUND_MODES);
+  localStorageSet('beamerSound', keys[(keys.indexOf(soundMode()) + 1) % keys.length]);
+}
+// Erst nach einem Klick spielt der Browser Ton ab (pro Seitenaufruf)
+const soundReady = () => !!Announce.audio && Announce.audio.state === 'running';
+
 function isActive(a) {
   return a && !a.endedAt && (!a.until || Date.parse(a.until) > Date.now());
 }
@@ -80,9 +90,10 @@ function showAnnouncement() {
   </div>`;
   if (Announce.lastGongId !== a.id) {
     Announce.lastGongId = a.id;
-    if (document.body.classList.contains('beamer-mode')) {
+    const mode = soundMode();
+    if (document.body.classList.contains('beamer-mode') && mode !== 'off') {
       if (a.gong) playGong();
-      if (state.settings.speakAnnouncements) setTimeout(() => speak(a.text), a.gong ? 2200 : 0); // nur der Text, nach dem Gong
+      if (a.speak && mode === 'speak') setTimeout(() => speak(a.text), a.gong ? 2200 : 0); // nur der Text, nach dem Gong
     }
   }
   if (a.until) Announce.hideTimer = setTimeout(showAnnouncement, Date.parse(a.until) - Date.now() + 200);
@@ -90,6 +101,8 @@ function showAnnouncement() {
 
 function sessionStorageGet(k) { try { return sessionStorage.getItem('lan-' + k); } catch { return null; } }
 function sessionStorageSet(k, v) { try { sessionStorage.setItem('lan-' + k, v); } catch { /* egal */ } }
+function localStorageGet(k) { try { return localStorage.getItem('lan-' + k); } catch { return null; } }
+function localStorageSet(k, v) { try { localStorage.setItem('lan-' + k, v); } catch { /* egal */ } }
 
 async function loadAnnouncement() {
   if (!on('announcements')) { Announce.active = null; showAnnouncement(); return null; }
@@ -133,7 +146,7 @@ adminViews.ansagen = {
               <label class="check"><input type="checkbox" id="annLamp" ${lampOk ? 'checked' : 'disabled'}> 🔴 Lampe${lampOk ? '' : ' (nicht eingerichtet)'}</label>
               <label class="check"><input type="checkbox" id="annGong" checked> 🔔 Gong (Beamer)</label>
               <label class="check"><input type="checkbox" id="annDiscord" ${state.discord ? 'checked' : 'disabled'}> 💬 Discord</label>
-              <label class="check" title="Discord liest die Durchsage bei allen vor, die den Kanal offen haben und TTS nicht abgeschaltet haben"><input type="checkbox" id="annTts" ${state.discord ? '' : 'disabled'}> 🗣️ in Discord vorlesen</label>
+              <label class="check" title="Der Beamer liest vor (wenn dort „Gong und vorlesen“ gewählt ist), Discord bei allen, die den Kanal offen haben und TTS nicht abgeschaltet haben"><input type="checkbox" id="annSpeak" ${s.speakDefault ? 'checked' : ''}> 🗣️ vorlesen</label>
             </div>
             <div class="field" style="margin-top:12px"><label for="annSec">Dauer in Sekunden <span class="meta">(0 = bis zum manuellen Beenden)</span></label>
               <input type="number" id="annSec" min="0" max="3600" value="${s.announceSeconds}" style="max-width:140px"></div>
@@ -176,7 +189,7 @@ adminViews.ansagen = {
           lamp: document.getElementById('annLamp').checked,
           gong: document.getElementById('annGong').checked,
           discord: document.getElementById('annDiscord').checked,
-          tts: document.getElementById('annTts').checked,
+          speak: document.getElementById('annSpeak').checked,
           seconds: Number(document.getElementById('annSec').value),
         });
         toast('📢 Durchsage gesendet');

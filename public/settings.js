@@ -53,9 +53,8 @@ adminViews.einstellungen = {
             </div>
             <div class="card"><h2>📺 Beamer</h2>
               <div class="field"><label for="bSec">Sekunden pro Folie</label><input id="bSec" type="number" min="5" max="600" value="${s.beamerSeconds}" style="max-width:140px"></div>
-              <label class="check"><input type="checkbox" id="spAnn" ${s.speakAnnouncements ? 'checked' : ''}> 🗣️ Durchsagen vorlesen</label>
               <label class="check"><input type="checkbox" id="spMatch" ${s.speakMatches ? 'checked' : ''}> 🗣️ Neue Turnierspiele vorlesen („… gegen … – ihr seid dran“)</label>
-              <p class="hint">Beamer-Ansicht öffnen: <a href="#/beamer">${esc(location.host)}/#/beamer</a> – für Ton und Sprachausgabe einmal auf 🔔 klicken.
+              <p class="hint">Beamer-Ansicht öffnen: <a href="#/beamer">${esc(location.host)}/#/beamer</a> – einmal auf „🔇 Ton aktivieren“ klicken, danach schaltet der Knopf zwischen Ton aus, nur Gong und Gong und vorlesen um.
                 Die Stimme kommt vom Betriebssystem des Beamer-Rechners (Deutsch installieren).</p>
             </div>
           </div>
@@ -65,6 +64,9 @@ adminViews.einstellungen = {
               <div class="field"><label for="aRole">Discord-Rolle für <code>/announce</code> <span class="meta">(leer = alle)</span></label><input id="aRole" value="${esc(s.announceRole)}" placeholder="z. B. Orga"></div>
               <div class="field"><label for="rMin">Programm: Standard-Erinnerung (Minuten vorher)</label><input id="rMin" type="number" min="0" max="1440" value="${s.remindMinutes}" style="max-width:140px"></div>
               <label class="check"><input type="checkbox" id="mPlayers" ${s.mentionPlayers ? 'checked' : ''}> Spieler in Turnier-Ansagen in Discord erwähnen (nur verknüpfte)</label>
+              <label class="check"><input type="checkbox" id="spDefault" ${s.speakDefault ? 'checked' : ''}> 🗣️ Durchsagen standardmäßig vorlesen (Discord und Beamer)</label>
+              <p class="hint">Gilt für <code>/announce</code> ohne <code>vorlesen</code> und das Programm; im Formular lässt es sich pro Durchsage ändern.
+                Am Beamer stellt der Ton-Knopf ein, ob er Gong und Vorlesen abspielt.</p>
             </div>
             <div class="card"><h2>🔴 DMX-Lampe</h2>
               <p class="meta">Die Lampe hängt per USB-DMX an einem Raspberry Pi mit OLA. Hier die Adresse der OLA-Weboberfläche eintragen.</p>
@@ -90,7 +92,7 @@ adminViews.einstellungen = {
       try {
         await api('PUT', '/settings', {
           beamerSeconds: Number(v('bSec')),
-          speakAnnouncements: document.getElementById('spAnn').checked,
+          speakDefault: document.getElementById('spDefault').checked,
           speakMatches: document.getElementById('spMatch').checked,
           announceSeconds: Number(v('aSec')),
           announceRole: v('aRole'),

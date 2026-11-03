@@ -59,9 +59,8 @@ const envNum = (name, def) => (env[name] !== undefined && env[name] !== '' && Nu
 const DEFAULT_SETTINGS = {
   eventName: env.EVENT_NAME || 'LAN-Party',
   beamerSeconds: 20,
-  // Beamer liest per Sprachausgabe des Browsers vor: Durchsagen bzw. neu anstehende Turnierspiele
-  speakAnnouncements: false,
-  speakMatches: false,
+  speakDefault: false, // Durchsagen standardmäßig vorlesen (Discord-TTS und Beamer); pro Durchsage änderbar
+  speakMatches: false, // Beamer liest neu anstehende Turnierspiele vor (Sprachausgabe des Browsers)
   announceSeconds: envNum('DMX_RESET_SECONDS', 60),
   announceRole: env.ANNOUNCE_ROLE_NAME || '',
   adminRole: env.ADMIN_DISCORD_ROLE || '', // Eindeutige Discord-Rollen-ID für den Admin-Bereich
@@ -124,7 +123,6 @@ const publicSettings = () => ({
   publicUrl: (process.env.PUBLIC_URL || '').replace(/\/+$/, '') || null, // für Links in QR-Codes
   event: modules.event ? modules.event.state() : null, // das aktuelle Event
   beamerSeconds: settings().beamerSeconds,
-  speakAnnouncements: !!settings().speakAnnouncements,
   speakMatches: !!settings().speakMatches,
   modules: visibleModules(),
 });
@@ -600,7 +598,7 @@ async function api(req, res, url) {
       if (eventName !== undefined) cur.eventName = eventName || 'LAN-Party'; // nur noch Vorgabe – die Namen stehen an den Events
       if (b.beamerSeconds !== undefined) cur.beamerSeconds = num(b.beamerSeconds, 5, 600, 20);
       if (b.announceSeconds !== undefined) cur.announceSeconds = num(b.announceSeconds, 0, 3600, 60);
-      if (b.speakAnnouncements !== undefined) cur.speakAnnouncements = !!b.speakAnnouncements;
+      if (b.speakDefault !== undefined) cur.speakDefault = !!b.speakDefault;
       if (b.speakMatches !== undefined) cur.speakMatches = !!b.speakMatches;
       if (announceRole !== undefined) cur.announceRole = announceRole;
       if (adminRole !== undefined && adminRole !== cur.adminRole) {
