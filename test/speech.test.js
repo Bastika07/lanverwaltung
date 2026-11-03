@@ -39,6 +39,20 @@ test('Sprachausgabe: erst nach dem Klick, ohne Emoji, mit deutscher Stimme', () 
   assert.equal(spoken.length, 1, 'nur Emoji: nichts vorlesen');
 });
 
+test('Beamer: liest bei einer Durchsage nur den Text vor', async () => {
+  const el = () => ({ hidden: true, innerHTML: '', querySelector: () => ({}) });
+  const elements = { banner: el(), overlay: el() };
+  const { context, spoken } = browser({ on: () => true, esc: (s) => s, setTimeout, clearTimeout, sessionStorage: { getItem: () => null, setItem() {} } });
+  context.document.getElementById = (id) => elements[id];
+  load(context, 'announce.js');
+  context.unlockAudio();
+  spoken.length = 0;
+  context.state.settings.speakAnnouncements = true;
+  vm.runInContext('Announce.lastGongId = ""; Announce.active = { id: "a1", text: "🍕 Pizza ist da!", by: "Dr. Orga", gong: false, at: new Date().toISOString() }; showAnnouncement();', context);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(spoken.map((u) => u.text), ['Pizza ist da!']);
+});
+
 test('Beamer: liest nur neu anstehende Spiele vor, viele auf einmal zusammengefasst', () => {
   const said = [];
   const { context } = browser({ speak: (s) => said.push(s), pname: (t, i) => t.participants[i] });

@@ -24,7 +24,7 @@ async function discordMock(t) {
 
 const waitFor = async (fn) => { for (let i = 0; i < 50 && !fn(); i++) await new Promise((r) => setTimeout(r, 20)); };
 
-test('Durchsage: „in Discord vorlesen“ setzt tts und schickt Text ohne Emoji und Fettdruck', async (t) => {
+test('Durchsage: „in Discord vorlesen“ setzt tts und schickt nur den Text ohne Emoji', async (t) => {
   const discord = await discordMock(t);
   const app = await isolated(t, {
     env: { DISCORD_BOT_TOKEN: 'synthetic-token', DISCORD_GUILD_ID: 'synthetic-guild', DISCORD_API_BASE: discord.base },
@@ -44,7 +44,7 @@ test('Durchsage: „in Discord vorlesen“ setzt tts und schickt Text ohne Emoji
   const [spoken, normal, ...rest] = discord.messages;
   assert.equal(spoken.channel, 'ansagen');
   assert.equal(spoken.tts, true);
-  assert.equal(spoken.content, 'Durchsage von Orga: Pizza ist da');
+  assert.equal(spoken.content, 'Pizza ist da', 'vorgelesen wird nur der Text');
   assert.equal(normal.tts, undefined);
   assert.equal(normal.content, '📢 **Durchsage** von Orga: Siegerehrung');
   assert.equal(rest.length, 0);

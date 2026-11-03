@@ -82,7 +82,7 @@ function showAnnouncement() {
     Announce.lastGongId = a.id;
     if (document.body.classList.contains('beamer-mode')) {
       if (a.gong) playGong();
-      if (state.settings.speakAnnouncements) setTimeout(() => speak(`Durchsage: ${a.text}`), a.gong ? 2200 : 0); // nach dem Gong
+      if (state.settings.speakAnnouncements) setTimeout(() => speak(a.text), a.gong ? 2200 : 0); // nur der Text, nach dem Gong
     }
   }
   if (a.until) Announce.hideTimer = setTimeout(showAnnouncement, Date.parse(a.until) - Date.now() + 200);
