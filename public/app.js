@@ -66,8 +66,14 @@ function toast(msg) {
   setTimeout(() => el.remove(), 2600);
 }
 
-const TYPE_LABELS = { ko: 'Single Elimination', de: 'Double Elimination', rr: 'Jeder gegen jeden' };
+const TYPE_LABELS = { ko: 'Single Elimination', de: 'Double Elimination', rr: 'Jeder gegen jeden', groups: 'Gruppen + K.-o.' };
 function typeLabel(type) { return TYPE_LABELS[type] || TYPE_LABELS.ko; }
+// Orga oder Turnierleiter dieses Turniers: darf alle Spiele bearbeiten
+const isRef = (t) => !!t && (state.admin || !!t.referee);
+const fmtTime = (iso) => new Date(iso).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+const fmtDay = (iso) => new Date(iso).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+// Startzeit einer Runde (vom Admin gesetzt), als kurzer Zusatz
+const roundTime = (t, key) => (t.roundTimes && key && t.roundTimes[key] ? fmtDay(t.roundTimes[key]) : '');
 
 function statusBadge(s) {
   if (s.status === 'draft') return '<span class="badge draft">Entwurf</span>';
@@ -245,8 +251,9 @@ function nowPlaying(tournaments) {
 }
 
 function nowItem({ t, m }, i) {
-  return `<button class="now-item" data-now="${i}">
-    <span class="now-where">${esc(t.name)} · ${esc(m.label)}</span>
+  const when = roundTime(t, m.roundKey);
+  return `<button class="now-item ${m.playing ? 'playing' : ''}" data-now="${i}">
+    <span class="now-where">${m.playing ? '<span class="live-dot">▶ läuft</span> ' : ''}${esc(t.name)} · ${esc(m.label)}${when ? ` · ab ${esc(when)}` : ''}${m.pending ? ' · ⏳ wartet auf Bestätigung' : ''}</span>
     <span class="now-vs"><strong>${esc(pname(t, m.a))}</strong> <span class="vs">vs</span> <strong>${esc(pname(t, m.b))}</strong></span>
   </button>`;
 }
@@ -262,29 +269,34 @@ function bindNowItems(now) {
 function tournamentCard(t) {
   return `<a class="card tcard" href="#/t/${t.id}">
     <div class="row" style="justify-content:space-between"><h3>${esc(t.name)}</h3>${statusBadge(t)}</div>
-    <div class="meta">${t.game ? esc(t.game) + ' · ' : ''}${typeLabel(t.type)} · ${t.participants} Teilnehmer</div>
+    <div class="meta">${t.game ? esc(t.game) + ' · ' : ''}${typeLabel(t.type)} · ${t.participants} Teilnehmer${coinTag(t)}</div>
     ${t.champion ? `<div style="margin-top:8px">🏆 <strong>${esc(t.champion)}</strong></div>` : ''}
   </a>`;
 }
 
 // ---------- Turnieransicht ----------
+const coinTag = (t) => (state.settings.coinBudget && t.coins ? ` · ${t.coins} 🪙` : '');
+
 async function renderTournament(id) {
   const t = await api('GET', '/tournaments/' + id);
   state.tournament = t;
   if (t.status === 'draft') {
     app.innerHTML = `<div class="page-head"><div><h1>${esc(t.name)}</h1>
-      <div class="meta">Entwurf – noch nicht gestartet.</div></div>
-      ${state.admin ? `<a class="btn" href="#/admin/t/${t.id}">Bearbeiten</a>` : ''}</div>`;
+      <div class="meta">Entwurf – noch nicht gestartet.${coinTag(t)}</div></div>
+      ${state.admin ? `<a class="btn" href="#/admin/t/${t.id}">Bearbeiten</a>` : ''}</div>
+      ${prizesCard(t)}`;
     return;
   }
   const view = Bracket.compute(t);
   const scrollLefts = [...app.querySelectorAll('.bracket-wrap')].map((w) => w.scrollLeft);
+  const ref = isRef(t);
+  const toConfirm = view.matches.filter((m) => m.pending && !m.pending.disputed && t.mySides && t.mySides[m.id] && t.mySides[m.id] !== m.pending.by);
 
   app.innerHTML = `
     <div class="page-head">
       <div>
         <h1>${esc(t.name)}</h1>
-        <div class="meta">${t.game ? esc(t.game) + ' · ' : ''}${typeLabel(t.type)} · ${t.participants.length} Teilnehmer</div>
+        <div class="meta">${t.game ? esc(t.game) + ' · ' : ''}${typeLabel(t.type)} · ${t.participants.length} Teilnehmer${coinTag(t)}${t.confirm ? ' · Ergebnisse bestätigt die Gegenseite' : ''}</div>
       </div>
       <div class="row">
         ${view.finished ? '<span class="badge finished">Beendet</span>' : '<span class="badge running">Läuft</span>'}
@@ -293,18 +305,70 @@ async function renderTournament(id) {
       </div>
     </div>
     ${podium(t, view)}
-    ${state.admin ? '<p class="admin-note">🛠️ Admin-Modus: Klicke auf ein beliebiges gespieltes Spiel, um das Ergebnis zu korrigieren oder zu löschen.</p>' : ''}
-    ${!state.admin ? `<p class="hint">Ergebnisse dürfen nur angemeldete, verknüpfte Spieler dieses Spiels eintragen. ${state.userLogin ? '<a href="/api/auth/login">Mit Discord anmelden</a> · ' : ''}Discord-Verknüpfung: <code>/ich</code> mit eigenem Ticket oder Ticketcode; ohne Ticket hilft die Orga.</p>` : ''}
-    ${!view.finished ? `<p class="hint" style="margin-bottom:14px">Auf ein <strong>gelb markiertes</strong> Spiel klicken, um das Ergebnis einzutragen.${state.admin ? '' : ' Eingetragene Ergebnisse sind gesperrt und können nur von der Turnierleitung geändert werden.'}</p>` : ''}
+    ${toConfirm.length ? `<div class="card live"><h2>⏳ Bitte bestätigen</h2>${toConfirm.map((m) => `<p><button class="small primary" data-open="${esc(m.id)}">Ansehen</button>
+      ${esc(m.label)}: ${esc(pname(t, m.a))} <strong>${m.pending.a} : ${m.pending.b}</strong> ${esc(pname(t, m.b))}</p>`).join('')}</div>` : ''}
+    ${ref ? `<p class="admin-note">🛠️ ${state.admin ? 'Admin-Modus' : 'Turnierleitung'}: Klicke auf ein Spiel, um ein Ergebnis einzutragen, zu korrigieren, zu löschen oder kampflos zu werten.</p>` : ''}
+    ${!ref ? `<p class="hint">Ergebnisse dürfen nur angemeldete, verknüpfte Spieler dieses Spiels eintragen. ${state.userLogin ? '<a href="/api/auth/login">Mit Discord anmelden</a> · ' : ''}Discord-Verknüpfung: <code>/ich</code> mit eigenem Ticket oder Ticketcode; ohne Ticket hilft die Orga.</p>` : ''}
+    ${!view.finished ? `<p class="hint" style="margin-bottom:14px">Auf ein <strong>gelb markiertes</strong> Spiel klicken, um das Ergebnis einzutragen oder „Wir spielen“ zu melden.${ref ? '' : t.confirm ? ' Die Gegenseite bestätigt deine Meldung; ohne Einspruch gilt sie nach ' + (t.confirmMinutes || 10) + ' Minuten.' : ' Eingetragene Ergebnisse sind gesperrt und können nur von der Turnierleitung geändert werden.'}</p>` : ''}
     <div id="board"></div>`;
 
   const board = document.getElementById('board');
+  renderBoard(board, t, view);
+  app.querySelectorAll('.bracket-wrap').forEach((w, i) => { w.scrollLeft = scrollLefts[i] || 0; });
+  app.querySelectorAll('[data-open]').forEach((b) => {
+    const m = view.matches.find((x) => x.id === b.dataset.open);
+    if (m) b.onclick = () => openMatchDialog(t, m);
+  });
+  const extra = [prizesCard(t), rankingCard(t, view), await teamsCard(t), ref ? refCard(t, view) : ''].filter(Boolean).join('');
+  if (extra) board.insertAdjacentHTML('afterend', extra);
+  if (ref) bindRefCard(t);
+}
+
+// Baum bzw. Tabelle je nach Modus (auch für den Beamer)
+function renderBoard(board, t, view) {
   if (view.type === 'ko') renderKO(board, t, view);
   else if (view.type === 'de') renderDE(board, t, view);
+  else if (view.type === 'groups') renderGroups(board, t, view);
   else renderRR(board, t, view);
-  app.querySelectorAll('.bracket-wrap').forEach((w, i) => { w.scrollLeft = scrollLefts[i] || 0; });
-  const teams = await teamsCard(t);
-  if (teams) board.insertAdjacentHTML('afterend', teams);
+}
+
+// Preise je Platz
+function prizesCard(t) {
+  if (!t.prizes || !t.prizes.length) return '';
+  return `<div class="card" style="margin-top:16px"><h2>🎁 Preise</h2><ol class="prizes">${t.prizes.map((p) => `<li>${esc(p) || '–'}</li>`).join('')}</ol></div>`;
+}
+
+// Vollständiger Endstand (alle Plätze)
+function rankingCard(t, view) {
+  if (!view.finished || !view.ranking || view.ranking.length <= view.placements.length) return '';
+  return `<div class="card" style="margin-top:16px"><h2>📋 Endstand</h2><table><tbody>${view.ranking.map((r) =>
+    `<tr><td class="num">${r.place}.</td><td>${esc(t.participants[r.p])}${(t.disqualified || []).includes(r.p) ? ' <span class="meta">(disqualifiziert)</span>' : ''}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+// Turnierleitung: Disqualifikationen und Protokoll
+function refCard(t, view) {
+  const dq = new Set(t.disqualified || []);
+  const names = new Map(view.matches.map((m) => [m.id, m.label]));
+  const log = (t.log || []).slice().reverse().slice(0, 60);
+  return `<div class="card" style="margin-top:16px"><h2>🟥 Disqualifizieren</h2>
+      <p class="hint">Offene Spiele eines Disqualifizierten gehen kampflos an den Gegner; bereits gespielte Ergebnisse bleiben.</p>
+      <div class="dq-list">${t.participants.map((n, i) => `<label class="check"><input type="checkbox" data-dq="${i}" ${dq.has(i) ? 'checked' : ''}> ${esc(n)}</label>`).join('')}</div></div>
+    <div class="card" style="margin-top:16px"><h2>📜 Protokoll</h2>
+      ${log.length ? `<ul class="match-log">${log.map((e) => `<li><span class="meta">${esc(fmtDay(e.at))}</span>
+        ${e.match ? `<strong>${esc(names.get(e.match) || e.label)}</strong>: ` : ''}${esc(e.text)} <span class="meta">– ${esc(e.by)}</span></li>`).join('')}</ul>`
+        : '<p class="meta">Noch keine Einträge.</p>'}</div>`;
+}
+
+function bindRefCard(t) {
+  app.querySelectorAll('[data-dq]').forEach((c) => {
+    c.onchange = async () => {
+      const name = t.participants[Number(c.dataset.dq)];
+      if (c.checked && !confirm(`„${name}“ disqualifizieren? Offene Spiele gehen kampflos an die Gegner.`)) { c.checked = false; return; }
+      try { await api('POST', `/tournaments/${t.id}/disqualify`, { index: Number(c.dataset.dq), on: c.checked }); toast(c.checked ? 'Disqualifiziert' : 'Disqualifikation aufgehoben'); }
+      catch (err) { toast(err.message); }
+      render();
+    };
+  });
 }
 
 // Team-Mitglieder (über Discord gegründete/beigetretene Teams)
@@ -322,17 +386,20 @@ async function teamsCard(t) {
 function podium(t, view) {
   if (!view.finished || !view.placements.length) return '';
   const medals = { 1: '🥇', 2: '🥈', 3: '🥉', 4: '' };
+  const prize = (place) => (t.prizes && t.prizes[place - 1] ? `<div class="prize">🎁 ${esc(t.prizes[place - 1])}</div>` : '');
   return `<div class="podium">${view.placements.map((p) => `
     <div class="place p${p.place}">
       <div class="l">${medals[p.place] || ''} Platz ${p.place}</div>
-      <div class="n">${esc(t.participants[p.p])}</div>
+      <div class="n">${esc(t.participants[p.p])}</div>${prize(p.place)}
     </div>`).join('')}</div>`;
 }
 
+// Klickbar: spielbereite Spiele (eigene oder als Turnierleitung), gespielte nur für die Turnierleitung
 function canEdit(m) {
-  if (state.readOnly || state.tournament.status !== 'running') return false;
-  if (m.status === 'ready') return state.admin || (state.tournament.reportableMatches || []).includes(m.id);
-  return state.admin && m.status === 'done';
+  const t = state.tournament;
+  if (state.readOnly || t.status !== 'running') return false;
+  if (m.status === 'ready') return isRef(t) || (t.reportableMatches || []).includes(m.id);
+  return isRef(t) && m.status === 'done';
 }
 
 // --- Turnierbäume (Single & Double Elimination) ---
@@ -343,6 +410,8 @@ function matchBox(t, m, x, y) {
   const cls = ['match', m.status];
   if (m.status === 'bye' && m.a === null && m.b === null) cls.push('empty');
   if (canEdit(m)) cls.push('clickable');
+  if (m.playing) cls.push('playing');
+  if (m.pending) cls.push(m.pending.disputed ? 'disputed' : 'reported');
   const slot = (idx, side, hint) => {
     const name = pname(t, idx);
     const c = ['slot'];
@@ -351,7 +420,7 @@ function matchBox(t, m, x, y) {
     if (m.status === 'bye' && m.winner === idx && idx !== null) c.push('win');
     const label = name ?? (m.status === 'skip' ? 'entfällt' : hint || 'offen');
     return `<div class="${c.join(' ')}"><span class="name" title="${esc(label)}">${esc(label)}</span>
-      <span class="score">${m.score ? m.score[side] : ''}</span></div>`;
+      <span class="score">${scoreCell(m, side)}</span></div>`;
   };
   // Rundenstände je Map (CS2 über TMT2) als Tooltip und unter dem Spiel
   const maps = m.status === 'done' && Array.isArray(m.maps) ? m.maps.map((p) => `${p.name.replace(/^de_/, '')} ${p.a}:${p.b}`).join(' · ') : '';
@@ -360,11 +429,23 @@ function matchBox(t, m, x, y) {
     ? `<div class="match-maps" style="left:${x}px;top:${y + BOX_H / 2 + 2}px;width:${COL_W}px" title="${esc(maps)}">${esc(maps)}</div>` : ''}`;
 }
 
+// Ergebnisfeld: Punkte, kampflos (w.o.) bzw. disqualifiziert (DQ)
+function scoreCell(m, side) {
+  if (m.wo) return m.wo === side || m.wo === 'both' ? (m.dq ? 'DQ' : 'w.o.') : '✓';
+  return m.score ? m.score[side] : '';
+}
+function scoreText(m) {
+  if (m.wo === 'both') return 'DQ';
+  if (m.wo) return m.wo === 'a' ? (m.dq ? 'DQ : ✓' : 'w.o. : ✓') : (m.dq ? '✓ : DQ' : '✓ : w.o.');
+  return m.score ? `${m.score.a} : ${m.score.b}` : m.pending ? `⏳ ${m.pending.a} : ${m.pending.b}` : '– : –';
+}
+
 // Zeichnet einen Baum. centerY(r, i) liefert die vertikale Mitte, feeds(r, i) die Vorgänger-Spiele.
 function drawTree(t, { rounds, names, centerY, feeds, extra = '', minHeight = 0 }) {
   let html = '', paths = '', height = minHeight;
   names.forEach((n, r) => {
-    html += `<div class="round-title" style="left:${colX(r)}px;width:${COL_W}px">${esc(n)}</div>`;
+    const when = roundTime(t, rounds[r] && rounds[r][0] && rounds[r][0].roundKey);
+    html += `<div class="round-title" style="left:${colX(r)}px;width:${COL_W}px">${esc(n)}${when ? ` <span class="when">· ${esc(when)}</span>` : ''}</div>`;
   });
   rounds.forEach((list, r) => {
     list.forEach((m, i) => {
@@ -426,27 +507,30 @@ function renderDE(board, t, view) {
 }
 
 // --- Jeder gegen jeden ---
-function renderRR(board, t, view) {
-  const table = `<div class="card"><h2>Tabelle</h2><div style="overflow-x:auto"><table>
+// title: Gruppenname in der Gruppenphase (view.advance: so viele kommen weiter)
+function renderRR(board, t, view, title = 'Tabelle') {
+  const table = `<div class="card"><h2>${esc(title)}</h2><div style="overflow-x:auto"><table>
     <thead><tr><th>#</th><th>Teilnehmer</th><th class="num">Sp</th><th class="num">S</th><th class="num">U</th><th class="num">N</th>
     <th class="num hide-sm">Tore</th><th class="num">Diff</th><th class="num">Pkt</th></tr></thead>
-    <tbody>${view.standings.map((s) => `<tr class="${view.finished && s.place === 1 ? 'leader' : ''}">
-      <td>${s.place}</td><td>${view.finished && s.place === 1 ? '🏆 ' : ''}${esc(t.participants[s.p])}</td>
+    <tbody>${view.standings.map((s) => `<tr class="${view.finished && s.place === 1 && !view.advance ? 'leader' : ''} ${view.advance && s.place <= view.advance ? 'qualified' : ''} ${s.dq ? 'dq' : ''}">
+      <td>${s.place}</td><td>${view.finished && s.place === 1 && !view.advance ? '🏆 ' : ''}${esc(t.participants[s.p])}${s.dq ? ' <span class="meta">(DQ)</span>' : ''}</td>
       <td class="num">${s.played}</td><td class="num">${s.w}</td><td class="num">${s.d}</td><td class="num">${s.l}</td>
       <td class="num hide-sm">${s.gf}:${s.ga}</td><td class="num">${s.gf - s.ga > 0 ? '+' : ''}${s.gf - s.ga}</td><td class="num"><strong>${s.pts}</strong></td>
     </tr>`).join('')}</tbody></table></div>
-    <p class="hint">Sieg 3 Punkte, Unentschieden 1 Punkt.</p></div>`;
+    <p class="hint">Sieg 3 Punkte (auch kampflos), Unentschieden 1 Punkt.${view.advance ? ` Die besten ${view.advance} kommen in die K.-o.-Runde.` : ''}</p></div>`;
 
   const rounds = `<div class="rr-rounds">${view.rounds.map((list, r) => `
-    <div class="card"><h3>${esc(view.roundNames[r])}</h3>
+    <div class="card"><h3>${esc(view.roundNames[r])}${roundTime(t, list[0] && list[0].roundKey) ? ` <span class="meta">· ${esc(roundTime(t, list[0].roundKey))}</span>` : ''}</h3>
       ${list.map((m) => {
         const cls = ['rr-match', m.status];
         if (canEdit(m)) cls.push('clickable');
+        if (m.playing) cls.push('playing');
+        if (m.pending) cls.push(m.pending.disputed ? 'disputed' : 'reported');
         const wa = m.status === 'done' && m.winner === m.a ? 'w' : '';
         const wb = m.status === 'done' && m.winner === m.b ? 'w' : '';
         return `<div class="${cls.join(' ')}" data-match="${m.id}">
           <span class="${wa}">${esc(pname(t, m.a))}</span>
-          <span class="res">${m.score ? `${m.score.a} : ${m.score.b}` : '– : –'}</span>
+          <span class="res">${m.playing ? '▶ ' : ''}${scoreText(m)}</span>
           <span class="b ${wb}">${esc(pname(t, m.b))}</span></div>`;
       }).join('')}
     </div>`).join('')}</div>`;
@@ -455,13 +539,21 @@ function renderRR(board, t, view) {
   bindMatchClicks(board, t, view);
 }
 
+// Gruppenphase: Tabelle und Spieltage je Gruppe, darunter der K.-o.-Baum
+function renderGroups(board, t, view) {
+  board.innerHTML = `<div class="groups">${view.groups.map((g, i) => `<div class="group" data-group="${i}"></div>`).join('')}</div>
+    <h2 class="section-title">K.-o.-Runde</h2><div id="koBoard"></div>`;
+  view.groups.forEach((g, i) => renderRR(board.querySelector(`[data-group="${i}"]`), t, g, g.name));
+  renderKO(board.querySelector('#koBoard'), t, view.ko);
+}
+
 function bindMatchClicks(board, t, view) {
   if (state.readOnly) return;
   board.querySelectorAll('[data-match]').forEach((el) => {
     const m = view.matches.find((x) => x.id === el.dataset.match);
     if (!m) return;
     if (canEdit(m)) {
-      el.title = m.status === 'done' ? 'Ergebnis korrigieren' : 'Ergebnis eintragen';
+      el.title = m.status === 'done' ? 'Ergebnis korrigieren' : m.pending ? 'Gemeldetes Ergebnis ansehen' : 'Ergebnis eintragen';
       el.addEventListener('click', () => openMatchDialog(t, m));
     } else if (m.status === 'done') {
       el.classList.add('locked');
@@ -472,43 +564,98 @@ function bindMatchClicks(board, t, view) {
 }
 
 // ---------- Ergebnis-Dialog ----------
-// Nutzer: Eintrag nur einmal, mit Bestätigungsschritt. Admin: jederzeit ändern oder löschen.
+// Spieler: Eintrag nur einmal, mit Bestätigungsschritt (bzw. Bestätigung durch die Gegenseite).
+// Orga und Turnierleitung: jederzeit ändern, löschen oder kampflos werten.
 const dlg = document.getElementById('matchDialog');
 const $ = (id) => document.getElementById(id);
 let dlgMatch = null;
 let dlgConfirming = false;
+const drawOk = (t, m) => t.type === 'rr' || (t.type === 'groups' && m.id.startsWith('G'));
 
 function setConfirming(on) {
   dlgConfirming = on;
-  $('mdInputs').hidden = on;
+  const { t, m } = dlgMatch;
+  $('mdInputs').hidden = on || !dlgMatch.inputs;
   $('mdConfirm').hidden = !on;
   $('mdHint').hidden = on;
-  $('mdCancel').textContent = on ? 'Zurück' : 'Abbrechen';
-  if (on) $('mdSave').textContent = 'Endgültig speichern';
-  else if (state.admin) $('mdSave').textContent = dlgMatch.m.status === 'done' ? 'Korrektur speichern' : 'Speichern';
+  $('mdExtra').hidden = on;
+  $('mdSave').hidden = !on && !dlgMatch.inputs;
+  $('mdCancel').textContent = on ? 'Zurück' : dlgMatch.inputs ? 'Abbrechen' : 'Schließen';
+  if (on) $('mdSave').textContent = t.confirm && !isRef(t) ? 'Melden' : 'Endgültig speichern';
+  else if (isRef(t)) $('mdSave').textContent = m.status === 'done' ? 'Korrektur speichern' : 'Speichern';
   else $('mdSave').textContent = 'Weiter';
 }
 
 function openMatchDialog(t, m) {
-  dlgMatch = { t, m };
+  const ref = isRef(t);
+  const mine = (t.mySides || {})[m.id];
+  const p = m.pending;
+  const waitingForOther = !ref && p && p.by === mine;
+  dlgMatch = { t, m, inputs: ref || (m.status === 'ready' && !waitingForOther && !(p && p.disputed)) };
   const done = m.status === 'done';
-  $('mdTitle').textContent = done ? 'Ergebnis korrigieren' : 'Ergebnis eintragen';
+  $('mdTitle').textContent = done ? 'Ergebnis korrigieren' : p ? 'Gemeldetes Ergebnis' : 'Ergebnis eintragen';
   $('mdNameA').textContent = pname(t, m.a);
   $('mdNameB').textContent = pname(t, m.b);
-  $('mdA').value = m.score ? m.score.a : '';
-  $('mdB').value = m.score ? m.score.b : '';
+  $('mdA').value = m.score ? m.score.a : p ? p.a : '';
+  $('mdB').value = m.score ? m.score.b : p ? p.b : '';
   $('mdError').textContent = '';
 
-  let hint = t.type !== 'rr'
+  let hint = !drawOk(t, m)
     ? 'Kein Unentschieden möglich – der Gewinner zieht automatisch in die nächste Runde ein.'
     : 'Unentschieden ist erlaubt.';
   if (done) hint += ' Achtung: Ändert sich der Gewinner, werden davon abhängige spätere Ergebnisse gelöscht.';
-  else if (!state.admin) hint += ' Nach dem Speichern kann das Ergebnis nur noch die Turnierleitung ändern.';
+  else if (!ref && t.confirm) hint += ` Die Gegenseite bestätigt dein Ergebnis; ohne Einspruch gilt es nach ${t.confirmMinutes || 10} Minuten.`;
+  else if (!ref) hint += ' Nach dem Speichern kann das Ergebnis nur noch die Turnierleitung ändern.';
   $('mdHint').textContent = hint;
-  $('mdReset').hidden = !(state.admin && done);
+
+  // Zusatzaktionen: Meldung bestätigen/bestreiten, „Wir spielen“, kampflos werten
+  const side = (s) => esc(pname(t, s === 'a' ? m.a : m.b));
+  let extra = '';
+  if (p) {
+    extra += `<div class="md-pending ${p.disputed ? 'disputed' : ''}">${p.disputed ? '⚠️ Strittig' : '⏳ Gemeldet'} von ${side(p.by)}:
+      <strong>${p.a} : ${p.b}</strong>${p.disputed ? ' – die Turnierleitung entscheidet.' : waitingForOther ? ' – wartet auf Bestätigung durch die Gegenseite.' : ''}</div>`;
+    if (!p.disputed && (ref || (mine && mine !== p.by))) {
+      extra += `<div class="row"><button type="button" class="primary" data-act="confirm">✅ ${ref ? 'Meldung übernehmen' : 'Stimmt, bestätigen'}</button>
+        ${ref ? '' : '<button type="button" class="danger" data-act="dispute">⚠️ Stimmt nicht</button>'}</div>`;
+    }
+  }
+  if (m.status === 'ready') {
+    extra += `<div class="row"><button type="button" data-act="playing">${m.playing ? '⏸️ Läuft doch nicht' : '▶️ Wir spielen'}</button>
+      ${m.playing ? `<span class="meta">läuft seit ${esc(fmtTime(m.playingSince))}</span>` : ''}</div>`;
+  }
+  if (ref && (m.status === 'ready' || done)) {
+    extra += `<div class="row"><span class="meta">Kampflos:</span>
+      <button type="button" class="small" data-act="wo-b">${side('a')} gewinnt</button>
+      <button type="button" class="small" data-act="wo-a">${side('b')} gewinnt</button></div>`;
+  }
+  $('mdExtra').innerHTML = extra;
+  $('mdExtra').querySelectorAll('[data-act]').forEach((b) => { b.onclick = () => matchAction(b.dataset.act); });
+  $('mdReset').hidden = !(ref && done);
   setConfirming(false);
   dlg.showModal();
-  $('mdA').focus();
+  if (dlgMatch.inputs) $('mdA').focus();
+}
+
+async function matchAction(act) {
+  const { t, m } = dlgMatch;
+  const url = `/tournaments/${t.id}/matches/${m.id}`;
+  try {
+    if (act === 'confirm') { await api('POST', url + '/confirm'); toast('Ergebnis bestätigt'); }
+    else if (act === 'dispute') {
+      if (!confirm('Dem gemeldeten Ergebnis widersprechen? Dann entscheidet die Turnierleitung.')) return;
+      await api('POST', url + '/dispute'); toast('Widerspruch gemeldet – die Turnierleitung entscheidet');
+    } else if (act === 'playing') { await api('POST', url + '/playing', { on: !m.playing }); toast(m.playing ? 'Läuft nicht mehr' : '▶️ Viel Erfolg!'); }
+    else if (act === 'wo-a' || act === 'wo-b') {
+      const loser = act === 'wo-a' ? 'a' : 'b';
+      if (!confirm(`${pname(t, loser === 'a' ? m.b : m.a)} gewinnt kampflos gegen ${pname(t, loser === 'a' ? m.a : m.b)}?`)) return;
+      await api('POST', url + '/forfeit', { side: loser }); toast('Kampflos gewertet');
+    }
+    dlg.close();
+    render();
+  } catch (err) {
+    $('mdError').textContent = err.message;
+    render();
+  }
 }
 
 async function saveResult(a, b) {
@@ -516,7 +663,7 @@ async function saveResult(a, b) {
   try {
     await api('POST', `/tournaments/${t.id}/matches/${m.id}`, { a, b });
     dlg.close();
-    toast(m.status === 'done' ? 'Ergebnis korrigiert' : 'Ergebnis gespeichert');
+    toast(m.status === 'done' ? 'Ergebnis korrigiert' : t.confirm && !isRef(t) ? 'Gemeldet – die Gegenseite bestätigt' : 'Ergebnis gespeichert');
     render();
   } catch (err) {
     setConfirming(false);
@@ -535,18 +682,20 @@ $('matchForm').addEventListener('submit', async (e) => {
   const { t, m } = dlgMatch;
   const a = Number($('mdA').value);
   const b = Number($('mdB').value);
-  if (t.type !== 'rr' && a === b) {
+  if (!drawOk(t, m) && a === b) {
     $('mdError').textContent = 'Im K.-o.-System ist kein Unentschieden möglich.';
     return;
   }
   $('mdError').textContent = '';
-  // Admin speichert direkt, Nutzer bestätigen erst – danach ist das Ergebnis gesperrt.
-  if (state.admin || dlgConfirming) return saveResult(a, b);
+  // Orga und Turnierleitung speichern direkt, Spieler bestätigen erst.
+  if (isRef(t) || dlgConfirming) return saveResult(a, b);
   const winner = a > b ? pname(t, m.a) : b > a ? pname(t, m.b) : null;
   $('mdConfirm').innerHTML = `
     <div class="md-score"><span>${esc(pname(t, m.a))}</span><strong>${a} : ${b}</strong><span>${esc(pname(t, m.b))}</span></div>
     <p>${winner ? `Sieger: <strong>${esc(winner)}</strong>` : 'Unentschieden'}</p>
-    <p class="md-warn">🔒 Bitte prüfen: Nach dem Speichern kannst du das Ergebnis nicht mehr ändern. Korrekturen sind dann nur noch durch die Turnierleitung möglich.</p>`;
+    <p class="md-warn">${t.confirm
+      ? (m.pending && m.pending.by !== (t.mySides || {})[m.id] ? '⚠️ Weicht dein Ergebnis von der Meldung der Gegenseite ab, entscheidet die Turnierleitung.' : '⏳ Die Gegenseite muss dein Ergebnis bestätigen.')
+      : '🔒 Bitte prüfen: Nach dem Speichern kannst du das Ergebnis nicht mehr ändern. Korrekturen sind dann nur noch durch die Turnierleitung möglich.'}</p>`;
   setConfirming(true);
 });
 
@@ -642,8 +791,13 @@ function tournamentForm(t, isNew) {
         <option value="ko" ${t.type === 'ko' ? 'selected' : ''}>Single Elimination (K.-o., eine Niederlage = raus)</option>
         <option value="de" ${t.type === 'de' ? 'selected' : ''}>Double Elimination (raus nach zwei Niederlagen)</option>
         <option value="rr" ${t.type === 'rr' ? 'selected' : ''}>Jeder gegen jeden (Liga)</option>
+        <option value="groups" ${t.type === 'groups' ? 'selected' : ''}>Gruppenphase, danach K.-o.-Runde</option>
       </select></div>
-    <div class="field" id="thirdField" ${t.type !== 'ko' ? 'hidden' : ''}><label class="check"><input type="checkbox" id="fThird" ${t.thirdPlace ? 'checked' : ''} ${locked ? 'disabled' : ''}> Spiel um Platz 3</label></div>
+    <div class="field" id="groupsField" ${t.type !== 'groups' ? 'hidden' : ''}><div class="row two-inputs">
+      <label>Gruppen <input id="fGroups" type="number" min="2" max="16" value="${(t.groups || {}).count || 4}" ${locked ? 'disabled' : ''}></label>
+      <label>Weiter je Gruppe <input id="fAdvance" type="number" min="1" max="4" value="${(t.groups || {}).advance || 2}" ${locked ? 'disabled' : ''}></label></div>
+      <p class="hint">Verteilung nach Setzliste im Schlangenmuster. Gruppenerste treffen in der K.-o.-Runde zuerst auf Zweite anderer Gruppen.</p></div>
+    <div class="field" id="thirdField" ${t.type !== 'ko' && t.type !== 'groups' ? 'hidden' : ''}><label class="check"><input type="checkbox" id="fThird" ${t.thirdPlace ? 'checked' : ''} ${locked ? 'disabled' : ''}> Spiel um Platz 3</label></div>
     <div class="field" id="resetField" ${t.type !== 'de' ? 'hidden' : ''}><label class="check"><input type="checkbox" id="fReset" ${t.gfReset !== false ? 'checked' : ''} ${locked ? 'disabled' : ''}> Grand Final mit Reset</label>
       <p class="hint">Gewinnt der Sieger der Verliererrunde das Grand Final, folgt ein Entscheidungsspiel.</p></div>
     <div class="field"><label for="fTeam">Spieler pro Team</label>
@@ -655,9 +809,25 @@ function tournamentForm(t, isNew) {
       <p class="hint" id="partCount"></p>
       ${locked ? '<p class="hint">Turnier läuft: Teilnehmer können nur umbenannt werden (Anzahl und Reihenfolge bleiben gleich).</p>' : ''}
     </div>
+    ${!locked ? `<div class="field"><label for="fSeeds">Feste Setzplätze <span class="meta">(die ersten N der Liste)</span></label>
+      <input id="fSeeds" type="number" min="0" max="256" value="${t.seeds || 0}" style="max-width:120px">
+      <p class="hint">Bei „Starten (Auslosung)“ bleiben diese Plätze, der Rest wird ausgelost. 0 = alles auslosen.</p></div>` : ''}
+    <div class="field"><label class="check"><input type="checkbox" id="fConfirm" ${t.confirm ? 'checked' : ''}> Ergebnis muss die Gegenseite bestätigen</label>
+      <div class="row" id="fConfirmRow" ${t.confirm ? '' : 'hidden'}><label>Ohne Einspruch gültig nach <input id="fConfirmMin" type="number" min="1" max="120" value="${t.confirmMinutes || 10}" style="max-width:80px"> Minuten</label></div>
+      <p class="hint">Widerspricht die Gegenseite, entscheidet die Turnierleitung. Ergebnisse aus TMT2 gelten sofort.</p></div>
+    <div class="field"><label for="fPrizes">Preise <span class="meta">(einer pro Zeile, Platz 1 zuerst)</span></label>
+      <textarea id="fPrizes" class="short" placeholder="Grafikkarte&#10;Gaming-Maus&#10;Mauspad">${esc((t.prizes || []).join('\n'))}</textarea></div>
+    ${state.settings.coinBudget || t.coins ? `<div class="field"><label for="fCoins">Kosten in Coins</label>
+      <input id="fCoins" type="number" min="0" max="99" value="${t.coins || 0}" ${locked ? 'disabled' : ''} style="max-width:120px">
+      <p class="hint">Jede Person hat ${state.settings.coinBudget || 0} Coins pro Event (Einstellungen → Turniere). 0 = kostenlos.</p></div>` : ''}
+    ${on('people') ? `<div class="field"><label>Turnierleiter <span class="meta">(dürfen Ergebnisse eintragen, korrigieren, kampflos werten und disqualifizieren)</span></label>
+      <div id="fRefs" class="picker"><span class="meta">Lade Teilnehmerliste …</span></div></div>` : ''}
     ${on('cs2') ? cs2Field(t) : ''}
     ${state.discord && !locked ? `<div class="field"><label class="check"><input type="checkbox" id="fSignup" ${t.signup ? 'checked' : ''}> Anmeldung über Discord offen</label>
-      <p class="hint">Solange das Turnier ein Entwurf ist, melden sich Spieler selbst an: <code>/anmelden</code> bzw. bei Teams <code>/team gruenden</code> und <code>/team beitreten</code>.</p></div>` : ''}
+      <p class="hint">Solange das Turnier ein Entwurf ist, melden sich Spieler selbst an: <code>/anmelden</code> bzw. bei Teams <code>/team gruenden</code> und <code>/team beitreten</code>.</p>
+      <div class="row two-inputs">
+        <label>Höchstens <input id="fMax" type="number" min="0" max="256" value="${t.maxParticipants || 0}" style="max-width:90px"> <span class="meta">(0 = offen)</span></label>
+        <label>Anmeldeschluss <input id="fUntil" type="datetime-local" value="${localInput(t.signupUntil)}"></label></div></div>` : ''}
     ${state.discord ? `<div class="field"><label class="check"><input type="checkbox" id="fDiscord" ${t.discordEnabled !== false ? 'checked' : ''}> Discord-Voice-Kanäle anlegen</label>
       <p class="hint">Eine Kategorie mit dem Turniernamen und ein Voice-Kanal pro Teilnehmer/Team. Wird beim Löschen des Turniers mit entfernt.</p></div>` : ''}
     <p class="error" id="fError"></p>
@@ -696,7 +866,42 @@ function readForm() {
     ...(document.getElementById('fDiscord') ? { discordEnabled: document.getElementById('fDiscord').checked } : {}),
     ...(document.getElementById('fSignup') ? { signup: document.getElementById('fSignup').checked } : {}),
     ...(!document.getElementById('fTeam').disabled ? { teamSize: Number(document.getElementById('fTeam').value) } : {}),
+    ...(!document.getElementById('fGroups').disabled ? { groups: { count: Number(document.getElementById('fGroups').value), advance: Number(document.getElementById('fAdvance').value) } } : {}),
+    ...(document.getElementById('fSeeds') ? { seeds: Number(document.getElementById('fSeeds').value) } : {}),
+    confirm: document.getElementById('fConfirm').checked,
+    confirmMinutes: Number(document.getElementById('fConfirmMin').value),
+    prizes: document.getElementById('fPrizes').value.split('\n').map((x) => x.trim()),
+    ...(document.getElementById('fCoins') && !document.getElementById('fCoins').disabled ? { coins: Number(document.getElementById('fCoins').value) } : {}),
+    ...(document.getElementById('fMax') ? { maxParticipants: Number(document.getElementById('fMax').value), signupUntil: fromLocalInput(document.getElementById('fUntil').value) } : {}),
+    ...(formRefs ? { referees: [...formRefs] } : {}),
   };
+}
+
+// datetime-local (Ortszeit) <-> ISO
+function localInput(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+const fromLocalInput = (v) => (v ? new Date(v).toISOString() : null);
+
+// Turnierleiter aus der Teilnehmerliste wählen (feste Personen-IDs)
+let formRefs = null;
+async function loadRefPicker(t) {
+  const box = document.getElementById('fRefs');
+  formRefs = null;
+  if (!box) return;
+  const chosen = new Set((t && t.referees) || []);
+  const { people } = await api('GET', '/people').catch(() => ({ people: [] }));
+  if (!document.body.contains(box)) return;
+  formRefs = chosen;
+  const list = people.slice().sort((a, b) => (chosen.has(b.id) - chosen.has(a.id)) || a.name.localeCompare(b.name, 'de'));
+  box.innerHTML = list.length ? `<input type="search" id="fRefSearch" placeholder="Suchen …">
+    <div class="ref-list">${list.map((x) => `<label class="check" data-ref-name="${esc(x.name.toLowerCase())}"><input type="checkbox" value="${esc(x.id)}" ${chosen.has(x.id) ? 'checked' : ''}> ${esc(x.name)}</label>`).join('')}</div>`
+    : '<span class="meta">Noch keine Personen in der Teilnehmerliste.</span>';
+  box.querySelectorAll('input[type=checkbox]').forEach((c) => { c.onchange = () => { if (c.checked) formRefs.add(c.value); else formRefs.delete(c.value); }; });
+  const q = document.getElementById('fRefSearch');
+  if (q) q.oninput = () => box.querySelectorAll('[data-ref-name]').forEach((l) => { l.hidden = !l.dataset.refName.includes(q.value.toLowerCase()); });
 }
 
 // Auswahl aus der Teilnehmerliste: angehakte Personen werden angehängt bzw. ihr gleichnamiger Eintrag verknüpft
@@ -735,15 +940,19 @@ function bindTournamentForm(t) {
     const names = formNames(), n = names.length;
     const linked = names.filter((x) => formBound.has(x) || formPicked.has(x)).length;
     document.getElementById('partCount').textContent = `${n} Teilnehmer` + (linked ? ` · ${linked} mit Person verknüpft` : '') +
-      (document.getElementById('fType').value !== 'rr' && n > 1 ? ` · Baumgröße ${Bracket.nextPow2(n)} · ${Bracket.nextPow2(n) - n} Freilos(e), werden automatisch vergeben` : '')
+      (!['rr', 'groups'].includes(document.getElementById('fType').value) && n > 1 ? ` · Baumgröße ${Bracket.nextPow2(n)} · ${Bracket.nextPow2(n) - n} Freilos(e), werden automatisch vergeben` : '')
       + (document.getElementById('fType').value === 'rr' && n % 2 === 1 ? ' · ungerade Anzahl: pro Spieltag hat einer spielfrei' : '');
   };
   part.addEventListener('input', count);
   const cs2 = document.getElementById('fCs2');
   if (cs2) cs2.addEventListener('change', () => { document.getElementById('fCs2Formats').hidden = !cs2.checked; });
+  const conf = document.getElementById('fConfirm');
+  conf.addEventListener('change', () => { document.getElementById('fConfirmRow').hidden = !conf.checked; });
+  loadRefPicker(t);
   document.getElementById('fType').addEventListener('change', (e) => {
-    document.getElementById('thirdField').hidden = e.target.value !== 'ko';
+    document.getElementById('thirdField').hidden = e.target.value !== 'ko' && e.target.value !== 'groups';
     document.getElementById('resetField').hidden = e.target.value !== 'de';
+    document.getElementById('groupsField').hidden = e.target.value !== 'groups';
     count();
   });
   count();
@@ -787,7 +996,7 @@ async function renderAdminEdit(id) {
               <button class="primary" id="startShuffle">Starten (Auslosung)</button>
               <button id="startSeeded">Starten (Setzliste)</button>
             </div>
-            <p class="hint">„Setzliste“ nutzt die Reihenfolge der Teilnehmerliste (1. = Topgesetzt, bekommt ggf. Freilos).</p>` : `
+            <p class="hint">„Setzliste“ nutzt die Reihenfolge der Teilnehmerliste (1. = Topgesetzt, bekommt ggf. Freilos).${t.seeds ? ` Bei der Auslosung bleiben die ersten ${t.seeds} gesetzt.` : ''}</p>` : `
             <p class="meta">Das Turnier läuft. ${played} Ergebnis${played === 1 ? '' : 'se'} eingetragen.
               Ergebnisse korrigierst du direkt im Turnierbaum per Klick auf das Spiel.</p>
             <div class="row">
@@ -795,6 +1004,13 @@ async function renderAdminEdit(id) {
             </div>
             <p class="hint">Setzt das Turnier zurück – alle Ergebnisse und die Auslosung werden gelöscht.</p>`}
         </div>
+        ${roundTimesCard(t)}
+        ${t.status === 'draft' && (t.teamSize || 1) === 1 && t.participants.length >= 3 ? `<div class="card"><h2>🎲 Teams auslosen</h2>
+          <p class="meta">Aus den ${t.participants.length} Einzelanmeldungen werden Teams. Verknüpfte Spieler werden Teammitglieder.</p>
+          <div class="row"><label>Spieler pro Team <input id="drawSize" type="number" min="2" max="20" value="2" style="max-width:80px"></label>
+            <label class="check"><input type="checkbox" id="drawBalanced"> nach Setzliste ausgleichen</label>
+            <button id="drawTeams">Teams auslosen</button></div>
+          <p class="hint">„Nach Setzliste ausgleichen“: Die Reihenfolge der Liste gilt als Spielstärke, die Teams werden im Schlangenmuster verteilt. Sonst zufällig. Geht die Zahl nicht auf, sind einzelne Teams um einen Spieler kleiner.</p></div>` : ''}
         ${state.discord ? `<div class="card" id="discordCard">${discordCard(t)}</div>` : ''}
         ${await teamsCard(t)}
         <div class="card">
@@ -826,6 +1042,14 @@ async function renderAdminEdit(id) {
     render();
   };
   bindDiscordCard(t);
+  bindRoundTimes(t);
+  const draw = document.getElementById('drawTeams');
+  if (draw) draw.onclick = async () => {
+    const size = Number(document.getElementById('drawSize').value);
+    if (!confirm(`Aus ${t.participants.length} Spielern Teams à ${size} auslosen? Die Teilnehmerliste wird durch die Teams ersetzt.`)) return;
+    try { await api('POST', `/tournaments/${t.id}/draw-teams`, { size, balanced: document.getElementById('drawBalanced').checked }); toast('Teams ausgelost'); render(); }
+    catch (err) { toast(err.message); }
+  };
   document.getElementById('dupBtn').onclick = async () => {
     const copy = await api('POST', `/tournaments/${t.id}/duplicate`);
     location.hash = '#/admin/t/' + copy.id;
@@ -835,6 +1059,27 @@ async function renderAdminEdit(id) {
     if (!confirm(`Turnier „${t.name}“ wirklich löschen?${extra}`)) return;
     await api('DELETE', '/tournaments/' + t.id);
     location.hash = '#/admin';
+  };
+}
+
+// Startzeit je Runde: Runden aus dem Spielplan (im Entwurf aus der aktuellen Teilnehmerliste)
+function roundTimesCard(t) {
+  const view = Bracket.compute(t.status === 'running' ? t : { ...t, order: t.participants.map((_, i) => i) });
+  if (!view) return '';
+  const times = t.roundTimes || {};
+  return `<div class="card"><h2>🕒 Rundenzeiten</h2>
+    <div class="round-times">${view.roundList.map((r) => `<label>${esc(r.label)} <input type="datetime-local" data-round="${esc(r.key)}" value="${localInput(times[r.key])}"></label>`).join('')}</div>
+    <div class="row"><button id="saveRoundTimes">Zeiten speichern</button></div>
+    <p class="hint">Erscheinen im Turnierbaum, bei „Jetzt dran“ und auf dem Beamer.${t.status === 'draft' ? ' Ändert sich die Teilnehmerzahl, können Runden wegfallen.' : ''}</p></div>`;
+}
+
+function bindRoundTimes(t) {
+  const btn = document.getElementById('saveRoundTimes');
+  if (!btn) return;
+  btn.onclick = async () => {
+    const roundTimes = Object.fromEntries([...app.querySelectorAll('[data-round]')].filter((i) => i.value).map((i) => [i.dataset.round, fromLocalInput(i.value)]));
+    try { await api('PUT', '/tournaments/' + t.id, { roundTimes }); toast('Rundenzeiten gespeichert'); render(); }
+    catch (err) { toast(err.message); }
   };
 }
 

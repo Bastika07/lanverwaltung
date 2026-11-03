@@ -513,3 +513,29 @@ button.huge { font-size: 1.4rem; padding: 16px 32px; margin: 12px 0; width: 100%
 .pick-ticket.active { border-color: var(--accent); background: rgba(245, 179, 1, .1); }
 table.defrag { margin: 10px 0; }
 table.defrag td { padding: 4px 8px; }
+
+/* Turniere: läuft, wartet auf Bestätigung, strittig, kampflos; Gruppen, Preise, Protokoll */
+.match.playing, .rr-match.playing { box-shadow: 0 0 0 2px var(--win) inset; border-color: var(--win); }
+.match.reported, .rr-match.reported { border-style: dashed; }
+.match.disputed, .rr-match.disputed { border-color: var(--danger); box-shadow: 0 0 0 1px var(--danger) inset; }
+.now-item.playing { border-color: var(--win); }
+.live-dot { color: var(--win); font-weight: 700; }
+.round-title .when { color: var(--muted); font-weight: 400; }
+tr.qualified td:first-child { box-shadow: 3px 0 0 var(--win) inset; }
+tr.dq td { opacity: .55; text-decoration: line-through; }
+.groups { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 460px), 1fr)); margin-bottom: 8px; }
+.groups .rr-rounds { grid-template-columns: 1fr; }
+.podium .place .prize { color: var(--muted); font-size: .85rem; margin-top: 2px; }
+.prizes { margin: 0; padding-left: 1.4em; }
+.md-extra { display: grid; gap: 8px; margin: 8px 0; }
+.md-extra:empty { display: none; }
+.md-pending { background: rgba(245,179,1,.12); border: 1px solid var(--accent); border-radius: 8px; padding: 8px 10px; font-size: .9rem; }
+.md-pending.disputed { background: rgba(229,72,77,.12); border-color: var(--danger); }
+.match-log { list-style: none; margin: 0; padding: 0; max-height: 360px; overflow-y: auto; font-size: .9rem; }
+.match-log li { padding: 4px 0; border-bottom: 1px solid var(--border); }
+.dq-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 4px 12px; }
+#fRefs { display: block; }
+#fRefs input[type=search] { width: 100%; margin-bottom: 6px; }
+.ref-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; max-height: 180px; overflow-y: auto; }
+.round-times { display: grid; gap: 6px; margin-bottom: 8px; }
+.round-times label { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; }

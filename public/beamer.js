@@ -1,6 +1,6 @@
 'use strict';
 /* global api, esc, state, on, views, beamerSlides, Bracket, Sched, schedItem, loadFull, nowPlaying, nowItem,
-   podium, typeLabel, renderKO, renderDE, renderRR, render, unlockAudio, Announce, speak, pname, soundMode, nextSoundMode, soundReady, SOUND_MODES */
+   podium, typeLabel, renderBoard, render, unlockAudio, Announce, speak, pname, soundMode, nextSoundMode, soundReady, SOUND_MODES */
 // Beamer-Ansicht: Vollbild-Infoscreen. Wechselt durch Folien der aktiven Module
 // (Turniere, Programm, Infos, Sitzplan); Durchsagen legen sich darüber.
 
@@ -100,9 +100,8 @@ views.beamer = {
       const fit = document.getElementById('beamerFit');
       if (t) {
         const board = document.getElementById('board');
-        if (view.type === 'ko') renderKO(board, t, view);
-        else if (view.type === 'de') renderDE(board, t, view);
-        else { fit.style.width = '1200px'; renderRR(board, t, view); }
+        if (view.type === 'rr' || view.type === 'groups') fit.style.width = '1200px';
+        renderBoard(board, t, view);
       } else if (slide.width) fit.style.width = slide.width + 'px';
       fitBeamer();
     }
