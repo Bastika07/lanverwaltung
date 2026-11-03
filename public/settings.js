@@ -53,7 +53,10 @@ adminViews.einstellungen = {
             </div>
             <div class="card"><h2>📺 Beamer</h2>
               <div class="field"><label for="bSec">Sekunden pro Folie</label><input id="bSec" type="number" min="5" max="600" value="${s.beamerSeconds}" style="max-width:140px"></div>
-              <p class="hint">Beamer-Ansicht öffnen: <a href="#/beamer">${esc(location.host)}/#/beamer</a> – für Ton einmal auf 🔔 klicken.</p>
+              <label class="check"><input type="checkbox" id="spAnn" ${s.speakAnnouncements ? 'checked' : ''}> 🗣️ Durchsagen vorlesen</label>
+              <label class="check"><input type="checkbox" id="spMatch" ${s.speakMatches ? 'checked' : ''}> 🗣️ Neue Turnierspiele vorlesen („… gegen … – ihr seid dran“)</label>
+              <p class="hint">Beamer-Ansicht öffnen: <a href="#/beamer">${esc(location.host)}/#/beamer</a> – für Ton und Sprachausgabe einmal auf 🔔 klicken.
+                Die Stimme kommt vom Betriebssystem des Beamer-Rechners (Deutsch installieren).</p>
             </div>
           </div>
           <div>
@@ -87,6 +90,8 @@ adminViews.einstellungen = {
       try {
         await api('PUT', '/settings', {
           beamerSeconds: Number(v('bSec')),
+          speakAnnouncements: document.getElementById('spAnn').checked,
+          speakMatches: document.getElementById('spMatch').checked,
           announceSeconds: Number(v('aSec')),
           announceRole: v('aRole'),
           adminRole: v('adRole'),

@@ -1,10 +1,21 @@
 'use strict';
 /* global api, esc, state, on, views, beamerSlides, Bracket, Sched, schedItem, loadFull, nowPlaying, nowItem,
-   podium, typeLabel, renderKO, renderDE, renderRR, render, unlockAudio, Announce */
+   podium, typeLabel, renderKO, renderDE, renderRR, render, unlockAudio, Announce, speak, pname */
 // Beamer-Ansicht: Vollbild-Infoscreen. Wechselt durch Folien der aktiven Module
 // (Turniere, Programm, Infos, Sitzplan); Durchsagen legen sich darüber.
 
-const beamer = { idx: 0, timer: null };
+const beamer = { idx: 0, timer: null, seen: null };
+
+// Neu anstehende Spiele vorlesen. Das erste Laden (und jeder neue Aufruf des Beamers) liest nichts vor.
+function speakNewMatches(now) {
+  const keys = new Map(now.map((x) => [`${x.t.id}:${x.m.id}:${x.m.a}:${x.m.b}`, x]));
+  const fresh = beamer.seen ? [...keys].filter(([k]) => !beamer.seen.has(k)).map(([, x]) => x) : [];
+  beamer.seen = new Set(keys.keys());
+  if (!state.settings.speakMatches || !fresh.length) return;
+  if (fresh.length > 3) { speak(`${fresh.length} neue Spiele sind dran. Bitte auf den Beamer schauen.`); return; }
+  for (const { t, m } of fresh) speak(`${t.name}, ${m.label}: ${pname(t, m.a)} gegen ${pname(t, m.b)}. Ihr seid dran.`);
+}
+window.addEventListener('hashchange', () => { if (!location.hash.startsWith('#/beamer')) beamer.seen = null; });
 
 function stopBeamer() {
   clearInterval(beamer.timer);
@@ -35,6 +46,7 @@ async function beamerSidebar() {
   if (on('tournaments')) {
     const running = (await api('GET', '/tournaments')).filter((t) => t.status !== 'draft' && !t.finished);
     const now = nowPlaying(await loadFull(running));
+    speakNewMatches(now);
     html += `<h2>⚔️ Jetzt dran</h2>${now.length
       ? `<div class="now-list">${now.slice(0, 8).map(nowItem).join('')}</div>${now.length > 8 ? `<p class="meta">… und ${now.length - 8} weitere</p>` : ''}`
       : '<p class="meta">Gerade keine offenen Spiele.</p>'}`;
@@ -49,7 +61,7 @@ views.beamer = {
     const [slides, side] = await Promise.all([beamerSlideList(pinnedId), beamerSidebar()]);
     const name = state.settings.eventName || 'LAN-Party';
     const tools = `<div class="beamer-tools">
-      <button id="beamerSound" title="Ton für Durchsagen aktivieren">${Announce.audio && Announce.audio.state === 'running' ? '🔔' : '🔕'}</button>
+      <button id="beamerSound" title="Ton und Sprachausgabe für Durchsagen aktivieren">${Announce.audio && Announce.audio.state === 'running' ? '🔔' : '🔕'}</button>
       <button id="beamerFull" title="Vollbild">⛶</button><a class="btn" href="#/" title="Beamer-Ansicht verlassen">✕</a></div>`;
 
     if (!slides.length) {
