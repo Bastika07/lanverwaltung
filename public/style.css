@@ -253,7 +253,7 @@ body.beamer-mode main { padding: 0; max-width: none; }
 .beamer-stage { flex: 1; position: relative; overflow: hidden; }
 .beamer-fit { position: absolute; top: 0; left: 0; width: max-content; transform-origin: top left; }
 .beamer-fit .bracket-wrap { overflow: visible; }
-.beamer-side { background: var(--panel); border-left: 1px solid var(--border); padding: 24px 20px; display: flex; flex-direction: column; overflow: hidden; }
+.beamer-side { background: var(--panel); border-left: 1px solid var(--border); padding: 24px 20px 72px; display: flex; flex-direction: column; overflow: hidden; }
 .beamer-side h2 { font-size: clamp(1.2rem, 1.8vw, 2rem); }
 .beamer-side .now-list { grid-template-columns: 1fr; }
 .beamer-side .now-item { cursor: default; font-size: clamp(.9rem, 1.1vw, 1.25rem); }
@@ -264,6 +264,9 @@ body.beamer-mode main { padding: 0; max-width: none; }
 .beamer-empty span { font-size: 1.4rem; color: var(--muted); font-weight: 400; }
 .beamer-tools { position: fixed; right: 12px; bottom: 12px; display: flex; gap: 6px; opacity: .25; transition: opacity .2s; }
 .beamer-tools:hover { opacity: 1; }
+/* Vor dem Freigabe-Klick ist der Ton-Knopf gut sichtbar; die Seitenleiste lässt unten Platz für die Knöpfe */
+.beamer-tools.attention { opacity: 1; }
+.beamer-tools.attention #beamerSound { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 700; }
 @media (max-width: 800px) {
   .beamer { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
   .beamer-side { border-left: 0; border-top: 1px solid var(--border); max-height: 40vh; }

@@ -24,7 +24,7 @@ async function discordMock(t) {
 
 const waitFor = async (fn) => { for (let i = 0; i < 50 && !fn(); i++) await new Promise((r) => setTimeout(r, 20)); };
 
-test('Durchsage: „in Discord vorlesen“ setzt tts und schickt nur den Text ohne Emoji', async (t) => {
+test('Durchsage „vorlesen“: Discord bekommt tts und nur den Text ohne Emoji, Beamer das Flag speak', async (t) => {
   const discord = await discordMock(t);
   const app = await isolated(t, {
     env: { DISCORD_BOT_TOKEN: 'synthetic-token', DISCORD_GUILD_ID: 'synthetic-guild', DISCORD_API_BASE: discord.base },
@@ -33,13 +33,17 @@ test('Durchsage: „in Discord vorlesen“ setzt tts und schickt nur den Text oh
       data.events.find((x) => x.id === 'first').active = true;
     },
   });
-  const send = (body) => app.request('/api/announcements', { method: 'POST', admin: true, body: { seconds: 0, lamp: false, ...body } });
+  const send = async (body) => (await app.request('/api/announcements', { method: 'POST', admin: true, body: { seconds: 0, lamp: false, ...body } })).data;
 
-  assert.equal((await send({ text: '🍕 Pizza ist da', tts: true })).data.tts, true);
+  let a = await send({ text: '🍕 Pizza ist da', speak: true });
+  assert.deepEqual([a.speak, a.tts], [true, true]);
   await waitFor(() => discord.messages.length >= 1);
-  assert.equal((await send({ text: 'Siegerehrung' })).data.tts, false, 'Standard: nicht vorlesen');
+  a = await send({ text: 'Siegerehrung' });
+  assert.deepEqual([a.speak, a.tts], [false, false], 'Standard: nicht vorlesen');
   await waitFor(() => discord.messages.length >= 2);
-  assert.equal((await send({ text: 'Nur Beamer', tts: true, discord: false })).data.tts, false, 'ohne Discord-Post kein TTS');
+  a = await send({ text: 'Nur Beamer', speak: true, discord: false });
+  assert.deepEqual([a.speak, a.tts], [true, false], 'ohne Discord-Post kein TTS, der Beamer liest trotzdem');
+  assert.equal((await send({ text: 'Alter Name', tts: true, discord: false })).speak, true, 'früheres Feld tts gilt weiter');
 
   const [spoken, normal, ...rest] = discord.messages;
   assert.equal(spoken.channel, 'ansagen');
@@ -50,16 +54,21 @@ test('Durchsage: „in Discord vorlesen“ setzt tts und schickt nur den Text oh
   assert.equal(rest.length, 0);
 });
 
-test('Beamer-Sprachausgabe: nur Admins schalten sie, Besucher sehen den Schalter in den öffentlichen Einstellungen', async (t) => {
+test('„Standardmäßig vorlesen“: nur Admins schalten es, Durchsagen ohne Angabe folgen ihm', async (t) => {
   const app = await isolated(t);
-  const pub = async () => (await app.request('/api/me')).data.settings;
-  assert.deepEqual([(await pub()).speakAnnouncements, (await pub()).speakMatches], [false, false], 'Standard aus');
+  const settings = async () => (await app.request('/api/settings', { admin: true })).data;
+  assert.deepEqual([(await settings()).speakDefault, (await settings()).speakMatches], [false, false], 'Standard aus');
+  assert.equal((await app.request('/api/me')).data.settings.speakAnnouncements, undefined, 'alter Beamer-Schalter entfällt');
 
-  const denied = await app.request('/api/settings', { method: 'PUT', body: { speakAnnouncements: true } });
+  const denied = await app.request('/api/settings', { method: 'PUT', body: { speakDefault: true } });
   assert.ok([401, 403].includes(denied.status));
-  assert.equal((await pub()).speakAnnouncements, false);
+  assert.equal((await settings()).speakDefault, false);
 
-  assert.equal((await app.request('/api/settings', { method: 'PUT', admin: true, body: { speakAnnouncements: true, speakMatches: 'ja' } })).status, 200);
-  assert.deepEqual([(await pub()).speakAnnouncements, (await pub()).speakMatches], [true, true]);
-  assert.equal(app.snapshot().meta.settings.speakMatches, true, 'als Boolean gespeichert');
+  assert.equal((await app.request('/api/settings', { method: 'PUT', admin: true, body: { speakDefault: 'ja', speakMatches: true } })).status, 200);
+  assert.equal(app.snapshot().meta.settings.speakDefault, true, 'als Boolean gespeichert');
+  assert.equal((await app.request('/api/me')).data.settings.speakMatches, true, 'Spiele-Schalter ist für den Beamer öffentlich');
+
+  const send = async (body) => (await app.request('/api/announcements', { method: 'POST', admin: true, body: { seconds: 0, lamp: false, discord: false, ...body } })).data;
+  assert.equal((await send({ text: 'Ohne Angabe' })).speak, true);
+  assert.equal((await send({ text: 'Abgewählt', speak: false })).speak, false);
 });
