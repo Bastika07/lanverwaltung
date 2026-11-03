@@ -819,15 +819,16 @@ function tournamentForm(t, isNew) {
       <textarea id="fPrizes" class="short" placeholder="Grafikkarte&#10;Gaming-Maus&#10;Mauspad">${esc((t.prizes || []).join('\n'))}</textarea></div>
     ${state.settings.coinBudget || t.coins ? `<div class="field"><label for="fCoins">Kosten in Coins</label>
       <input id="fCoins" type="number" min="0" max="99" value="${t.coins || 0}" ${locked ? 'disabled' : ''} style="max-width:120px">
-      <p class="hint">Jede Person hat ${state.settings.coinBudget || 0} Coins pro Event (Einstellungen → Turniere). 0 = kostenlos.</p></div>` : ''}
+      <p class="hint">Jede Person hat ${state.settings.coinBudget || 0} Coins pro Event (Einstellungen → Turnier-Coins). 0 = kostenlos.</p></div>` : ''}
     ${on('people') ? `<div class="field"><label>Turnierleiter <span class="meta">(dürfen Ergebnisse eintragen, korrigieren, kampflos werten und disqualifizieren)</span></label>
       <div id="fRefs" class="picker"><span class="meta">Lade Teilnehmerliste …</span></div></div>` : ''}
     ${on('cs2') ? cs2Field(t) : ''}
     ${state.discord && !locked ? `<div class="field"><label class="check"><input type="checkbox" id="fSignup" ${t.signup ? 'checked' : ''}> Anmeldung über Discord offen</label>
       <p class="hint">Solange das Turnier ein Entwurf ist, melden sich Spieler selbst an: <code>/anmelden</code> bzw. bei Teams <code>/team gruenden</code> und <code>/team beitreten</code>.</p>
       <div class="row two-inputs">
-        <label>Höchstens <input id="fMax" type="number" min="0" max="256" value="${t.maxParticipants || 0}" style="max-width:90px"> <span class="meta">(0 = offen)</span></label>
-        <label>Anmeldeschluss <input id="fUntil" type="datetime-local" value="${localInput(t.signupUntil)}"></label></div></div>` : ''}
+        <label>Max. Teilnehmer <input id="fMax" type="number" min="0" max="256" value="${t.maxParticipants || 0}" style="max-width:90px" title="Teilnehmerlimit für die Discord-Anmeldung, 0 = unbegrenzt"></label>
+        <label>Anmeldeschluss <input id="fUntil" type="datetime-local" value="${localInput(t.signupUntil)}"></label></div>
+      <p class="hint">Teilnehmerlimit: Bei so vielen Teilnehmern bzw. Teams ist das Turnier voll, weitere Anmeldungen über Discord werden abgelehnt (bei Teams zählt jedes Team einmal). 0 = unbegrenzt. Ab dem Anmeldeschluss ist keine Anmeldung mehr möglich; leer = offen bis zum Start. Die Orga kann im Formular trotzdem jederzeit Teilnehmer eintragen.</p></div>` : ''}
     ${state.discord ? `<div class="field"><label class="check"><input type="checkbox" id="fDiscord" ${t.discordEnabled !== false ? 'checked' : ''}> Discord-Voice-Kanäle anlegen</label>
       <p class="hint">Eine Kategorie mit dem Turniernamen und ein Voice-Kanal pro Teilnehmer/Team. Wird beim Löschen des Turniers mit entfernt.</p></div>` : ''}
     <p class="error" id="fError"></p>
