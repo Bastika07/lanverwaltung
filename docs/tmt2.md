@@ -61,6 +61,37 @@ Im Admin-Bereich unter **CS2-Matches** steht dann „LAN-Client: 🟢 verbunden�
 | `TMT2_BIND_ADDRESS`, `TMT2_PORT` | LAN | Wo TMT2 lauscht. Die CS2-Server müssen TMT2 für ihre Logs erreichen |
 | `TMT2_LOG_ADDRESS` | LAN | Adresse von TMT2 aus Sicht der CS2-Server |
 
+### Ohne Docker (systemd, z. B. Proxmox-LXC)
+
+Läuft am LAN-Standort kein Docker, zum Beispiel in LXC-Containern unter Proxmox, laufen TMT2 und der LAN-Client als zwei systemd-Dienste direkt mit Node ≥ 22.
+
+1. **TMT2 bauen:** Den Fork klonen. Backend und Frontend wie im `Dockerfile` des Forks bauen (`npm ci` und `npm run build` je Teil). Das Ergebnis so ablegen, dass `/opt/tmt2/backend/dist/backend/src/index.js` und `/opt/tmt2/frontend/dist` existieren. TMT2 leitet sein Programmverzeichnis aus diesem Pfad ab. Dazu `backend/package.json` und `backend/node_modules` (nur Produktionspakete) kopieren.
+2. **Token vorab anlegen:** In TMT2s Datenordner, z. B. `/var/lib/tmt2`, die Datei `access_tokens.json` mit einem zufälligen Token schreiben: `{"<token>":{"comment":"LAN-Verwaltung"}}`. Dasselbe Token kommt als `TMT2_TOKEN` in eine Umgebungsdatei mit Rechten `600` für den Client. So erzeugt TMT2 kein eigenes Token und schreibt keines ins Log.
+3. **TMT2-Dienst** unter einem eigenen Systembenutzer:
+
+   ```ini
+   [Service]
+   User=tmt2
+   WorkingDirectory=/opt/tmt2/backend
+   ExecStart=/usr/bin/node ./dist/backend/src/index.js
+   Environment=NODE_ENV=production TMT_PORT=8088 TMT_STORAGE_FOLDER=/var/lib/tmt2
+   Environment=TMT_LOG_ADDRESS=http://192.168.1.10:8088
+   Restart=always
+   ProtectSystem=strict
+   ReadWritePaths=/var/lib/tmt2
+   ```
+
+4. **LAN-Client** aus einem Klon dieses Repositorys, ebenfalls unter einem eigenen Benutzer: `ExecStart=/usr/bin/node agent/tmt2-agent.js` mit `TMT2_URL=http://127.0.0.1:8088` sowie `LAN_URL`, `TMT2_AGENT_TOKEN` und `TMT2_TOKEN` aus Umgebungsdateien (`EnvironmentFile=`, Rechte `600`). Optional kommt `LAN_STATUS_FILE` dazu.
+
+**Mehrere Gameserver-Hosts:** Läuft jeder CS2-Server in einem eigenen Container, kann ein Skript auf dem TMT2-Host die Gameserver-Liste pflegen:
+
+- Das Skript fragt die Gameserver-Container regelmäßig per SSH ab (systemd-Timer).
+- Auf jedem Gameserver-Host erlaubt `authorized_keys` dem Schlüssel des Skripts nur ein festes Kommando, nur von der Adresse des TMT2-Hosts: `restrict,command="…",from="…"`.
+- Das Kommando meldet die CS2-Instanzen als JSON mit Name, Adresse, Zustand und dem RCON-Passwort des laufenden Servers.
+- Das Skript trägt die Server über die TMT2-API (`/api/gameservers`) ein und schreibt die Statusdatei für `LAN_STATUS_FILE`.
+- Passwörter gibt das Skript nie aus. Es speichert davon nur Hashes, um Änderungen zu erkennen.
+- Offene Server, die kein Turnier spielen (z. B. „4 All“), bleiben in TMT2 draußen.
+
 ## Gameserver und AMP
 
 Unter **CS2-Matches** zeigt die Karte **Gameserver** alle Server mit Name, `connect`-Adresse, Zustand (läuft/aus) und Belegung in TMT2 (frei, belegt mit Paarung, gesperrt, nicht in TMT2). Daneben stehen die Links **TMT2 öffnen ↗** und **AMP öffnen ↗**.
