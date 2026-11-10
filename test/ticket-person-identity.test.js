@@ -34,7 +34,8 @@ test('Ticketbearbeitung: eigene und ungebundene eigene Personen sowie Adminände
     const p = app.snapshot().persons.find((p) => p.id === 'buyer');
     assert.equal(p.name, 'Eigener Name');
     assert.equal(p.clan, 'Eigener Clan');
-    assert.equal(p.discordId, discordId);
+    // Unverknüpfte eigene Ticketperson mit dem eigenen Discord-Namen wird dem Käufer zugeordnet (Issue #97).
+    assert.equal(p.discordId, discordId ?? 'buyer');
     assert.equal(p.ticketOwnerId, 'buyer');
   }
 });

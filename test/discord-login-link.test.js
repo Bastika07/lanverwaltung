@@ -88,3 +88,40 @@ test('Discord-Login verknüpft nur die eindeutig eigene Ticketperson', async (t)
   assert.equal(app.snapshot().persons.filter((p) => p.discordId === 'anna').length, 1);
   assert.equal(app.logs().split('\n').filter((l) => l.includes('"discord_linked"')).length, 1);
 });
+
+// Meist meldet man sich zuerst an und bestellt danach: dann verknüpft die bezahlte Bestellung.
+test('Bestellung nach dem Login verknüpft, sobald sie bezahlt ist', async (t) => {
+  const base = await discordMock(t);
+  const app = await isolated(t, { prepare: (data) => {
+    const e = data.events.find((x) => x.id === 'first');
+    e.ticketTypes[0].quota = 50;
+    e.ticketTypes.push({ id: 'free', name: 'Gratis', active: true, price: 0, quota: 50, maxPerOrder: 5, participant: true });
+  }, env: { DISCORD_CLIENT_ID: 'synthetic-client', DISCORD_CLIENT_SECRET: 'synthetic-secret', DISCORD_OAUTH_BASE: base } });
+  const session = async (code) => {
+    const start = await fetch(`${app.base}/api/auth/login`, { redirect: 'manual' });
+    const state = new URL(start.headers.get('location')).searchParams.get('state');
+    const callback = await fetch(`${app.base}/api/auth/callback?code=${code}&state=${state}`, { redirect: 'manual', headers: { Cookie: `lan_state=${state}` } });
+    return callback.headers.getSetCookie().map((c) => c.split(';')[0]).find((c) => c.startsWith('lan_user='));
+  };
+  const profile = { ...app.profile, consent: true };
+  const linkedTo = (id) => app.snapshot().persons.filter((p) => p.discordId === id);
+
+  const gina = await session('gina');
+  assert.equal((await app.request('/api/account', { method: 'PUT', headers: { Cookie: gina }, body: profile })).status, 200);
+  assert.equal(linkedTo('gina').length, 0, 'login without ticket links nothing');
+  const free = await app.request('/api/tickets/orders', { method: 'POST', headers: { Cookie: gina }, body: { items: [{ typeId: 'free', holder: 'Gina' }] } });
+  assert.equal(free.status, 201, JSON.stringify(free.data));
+  assert.equal(linkedTo('gina').length, 1, 'free ticket ordered after login links immediately');
+
+  const hans = await session('hans');
+  assert.equal((await app.request('/api/account', { method: 'PUT', headers: { Cookie: hans }, body: profile })).status, 200);
+  const paid = await app.request('/api/tickets/orders', { method: 'POST', headers: { Cookie: hans }, body: { items: [{ typeId: 'normal', holder: 'hans' }] } });
+  assert.equal(paid.status, 201, JSON.stringify(paid.data));
+  assert.equal(linkedTo('hans').length, 0, 'unpaid order links nothing');
+  assert.equal((await app.request(`/api/tickets/orders/${paid.data.id}/paid`, { method: 'POST', admin: true, body: { paid: true } })).status, 200);
+  assert.equal(linkedTo('hans').length, 1, 'payment confirmation links the buyer');
+
+  const sec = app.logs().split('\n').filter((l) => l.includes('"discord_linked"')).map((l) => JSON.parse(l));
+  assert.deepEqual(sec.map((l) => l.via), ['paid_ticket', 'paid_ticket']);
+  assert.doesNotMatch(JSON.stringify(sec), /gina|hans/i);
+});
