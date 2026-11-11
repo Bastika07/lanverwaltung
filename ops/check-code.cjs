@@ -12,14 +12,16 @@ function sources(directory) {
     return entry.isDirectory() ? sources(file) : /\.(?:js|cjs|mjs)$/.test(entry.name) ? [file] : [];
   });
 }
-let failed = false;
+let failed = 0;
 const files = sources(root).sort();
 for (const file of files) {
   const result = spawnSync(process.execPath, ['--check', file], { stdio: 'inherit' });
   if (result.error) throw result.error;
-  if (result.status !== 0) failed = true;
+  if (result.status !== 0) failed++;
 }
 JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 JSON.parse(fs.readFileSync(path.join(root, 'ops/assessment-api.json'), 'utf8'));
-console.log(`Checked ${files.length} JavaScript files and project JSON; vendored upstream code excluded.`);
+// Letzte Zeile = Ergebnis: Wer nur das Ende der Ausgabe liest, muss einen Fehler sehen.
+if (failed) console.error(`FEHLER: Syntaxfehler in ${failed} von ${files.length} Dateien (Details oben).`);
+else console.log(`Checked ${files.length} JavaScript files and project JSON; vendored upstream code excluded.`);
 process.exitCode = failed ? 1 : 0;
