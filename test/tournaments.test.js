@@ -147,3 +147,62 @@ test('Ergebnis melden berechnet den Spielplan zweimal: vorher und nachher', (t) 
   of.reportResult({ admin: true }, tour, m.id, { a: 2, b: 0 });
   assert.equal(calls, 2);
 });
+
+test('Verwalten: nur die Orga legt an, ändert, startet, setzt zurück, kopiert, lost aus und löscht', async () => {
+  const { t, as, of, saves, HttpError } = withPlayers();
+  const rejects = (fn) => assert.throws(fn, (err) => err instanceof HttpError && err.status === 401);
+  for (const who of [as('a'), as('ref'), {}, tmt2]) {
+    rejects(() => of.create(who, { name: 'Synthetic Cup' }));
+    rejects(() => of.update(who, t, { name: 'Umbenannt' }));
+    rejects(() => of.start(who, t, {}));
+    rejects(() => of.reset(who, t));
+    rejects(() => of.duplicate(who, t));
+    rejects(() => of.drawTeams(who, t, { size: 2 }));
+    rejects(() => of.remove(who, t));
+    await assert.rejects(of.syncDiscord(who, t), (err) => err.status === 401);
+  }
+  assert.equal(saves.length, 0);
+  assert.equal(t.name, 'Cup');
+
+  const admin = { admin: true };
+  const draft = of.create(admin, { name: 'Synthetic Cup', participants: ['X', 'Y', 'Z'], seeds: 1 });
+  assert.equal(draft.status, 'draft');
+  const copy = of.duplicate(admin, draft);
+  assert.equal(copy.name, 'Synthetic Cup (Kopie)');
+  of.start(admin, draft, { shuffle: true });
+  assert.equal(draft.status, 'running');
+  assert.equal(draft.order[0], 0, 'fixed seed stays first');
+  of.reset(admin, draft);
+  assert.equal(draft.status, 'draft');
+  of.remove(admin, copy);
+  assert.equal(of.list().includes(copy), false);
+});
+
+test('Disqualifizieren: Turnierleitung ja, Spieler nein', () => {
+  const { t, as, of, notes, HttpError } = withPlayers();
+  assert.throws(() => of.disqualify(as('a'), t, 1), (err) => err instanceof HttpError && err.status === 403);
+  of.disqualify(as('ref'), t, 1);
+  assert.deepEqual(t.disqualified, [1]);
+  const [name, , info] = notes.at(-1);
+  assert.equal(name, 'disqualified');
+  assert.ok(info.before && info.after, 'notifier gets both views');
+  of.disqualify({ admin: true }, t, 1, false);
+  assert.deepEqual(t.disqualified, []);
+});
+
+test('Sichten: Entwürfe nur für die Orga, Protokoll nur für die Turnierleitung, Spieler sehen ihre Spiele', () => {
+  const { t, m, as, of, HttpError } = withPlayers({ log: [{ text: 'Synthetic' }] });
+  const anonymous = of.show({}, t);
+  assert.equal(anonymous.log, undefined);
+  assert.equal(anonymous.referees, undefined);
+  assert.deepEqual(anonymous.reportableMatches, []);
+  assert.deepEqual(of.show(as('ref'), t).log, [{ text: 'Synthetic' }]);
+  const player = of.show(as('a'), t);
+  assert.ok(player.reportableMatches.includes(m.id));
+  assert.equal(player.mySides[m.id], 'a');
+  t.status = 'draft';
+  assert.throws(() => of.show(as('a'), t), (err) => err instanceof HttpError && err.status === 404);
+  assert.equal(of.show({ admin: true }, t), t);
+  assert.deepEqual(of.overview({}).map((x) => x.id), []);
+  assert.deepEqual(of.overview({ admin: true }).map((x) => x.id), ['cup']);
+});
