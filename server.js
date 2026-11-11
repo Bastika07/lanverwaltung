@@ -6,7 +6,6 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const Bracket = require('./public/bracket.js');
 const Discord = require('./lib/discord.js');
 const Dmx = require('./lib/dmx.js');
 const Security = require('./lib/security.js');
@@ -238,22 +237,9 @@ function requireAdmin(req) {
   if (!isAdmin(req)) throw new HttpError(401, 'Admin-Login erforderlich');
 }
 
-function findTournament(id) {
-  const t = db.tournaments.find((x) => x.id === id);
-  if (!t) throw new HttpError(404, 'Turnier nicht gefunden');
-  return t;
-}
-
 function str(v, max = 100) {
   if (v !== null && typeof v === 'object') throw new HttpError(400, 'Textwert erwartet');
   return String(v || '').trim().slice(0, max);
-}
-
-// ---------- Turnierleitung, Protokoll, Ergebnisse ----------
-// Wer handelt: Orga (Admin), Turnierleiter dieses Turniers oder ein Spieler (mit seiner Person)
-function actor(req, t) {
-  const account = modules.accounts && modules.accounts.current(req);
-  return { ...tournaments.role({ admin: isAdmin(req), discordId: account ? account.id : null }, t), account };
 }
 
 // ---------- Coins ----------
@@ -303,14 +289,12 @@ function discordPost(text, onResult, kind = 'general', users = [], opts = {}) {
 }
 
 // ---------- Turniere ----------
-// Discord-Seite (Kanäle, Ansagen) und Turniermodul; die Routen unten ziehen in Schritt 3 ins Modul.
+// Turniermodul (lib/tournaments.js, samt /api/tournaments) und seine Discord-Seite (Kanäle, Ansagen)
 const tournamentDiscord = require('./lib/tournament-discord.js')({ Discord, settings, moduleOn, people: () => modules.people,
   events: () => modules.event, discordPost, save, broadcast, publicUrl: PUBLIC_URL });
-const tournaments = require('./lib/tournaments.js')({ db, save, broadcast, HttpError, str, notifier: tournamentDiscord, revision: () => revision });
-const { cleanParticipants, cleanType, cleanGroups, cleanTeamSize, cleanCs2, tournamentExtras, pruneStale, logMatch,
-  applyMembers, chosenPlayers, summary } = tournaments;
-const cachedView = tournaments.view;
-const { isFinished, clampInt } = require('./lib/tournaments.js');
+const tournaments = require('./lib/tournaments.js')({ db, save, broadcast, HttpError, str, notifier: tournamentDiscord, revision: () => revision,
+  http: { send, readBody, isAdmin, account: (req) => modules.accounts.current(req), requireUser: (req) => modules.accounts.requireUser(req),
+    rateLimit: Security.rateLimit, event: () => modules.event.scoped() } });
 
 // Offene Meldungen ohne Einspruch gelten nach t.confirmMinutes automatisch (alle Events)
 const autoConfirm = () => { for (const e of modules.event ? modules.event.all() : []) tournaments.of(e).autoConfirm(); };
@@ -423,7 +407,6 @@ async function api(req, res, url) {
     if (!admin && !m.alwaysOn && !moduleOn(m.moduleKey || key)) continue;
     if (m.routes && await m.routes(req, res, parts, method)) return;
   }
-  if (parts[0] === 'tournaments' && !admin && !moduleOn('tournaments')) throw new HttpError(404, 'Nicht gefunden');
 
   if (parts[0] === 'login' && method === 'POST') {
     Security.rateLimit(req, 'admin_login', 10, 15 * 60000); // max. 10 Versuche je 15 Minuten und IP
@@ -444,267 +427,6 @@ async function api(req, res, url) {
     res.setHeader('Set-Cookie', Security.cookie(req, 'session', '', { maxAge: 0, sameSite: 'Strict' }));
     Security.log('admin_logout', req);
     return send(res, 200, { admin: false });
-  }
-
-  if (parts[0] !== 'tournaments') throw new HttpError(404, 'Nicht gefunden');
-
-  // /api/tournaments
-  if (parts.length === 1) {
-    if (method === 'GET') {
-      const admin = isAdmin(req);
-      const list = db.tournaments.filter((t) => admin || t.status !== 'draft').map(summary);
-      return send(res, 200, list);
-    }
-    if (method === 'POST') {
-      requireAdmin(req);
-      const body = await readBody(req);
-      const name = str(body.name);
-      if (!name) throw new HttpError(400, 'Name fehlt');
-      const t = {
-        id: crypto.randomBytes(5).toString('hex'),
-        name,
-        game: str(body.game),
-        type: cleanType(body.type),
-        thirdPlace: !!body.thirdPlace,
-        gfReset: body.gfReset !== false,
-        discordEnabled: body.discordEnabled !== false,
-        teamSize: cleanTeamSize(body.teamSize),
-        cs2: cleanCs2(body.cs2),
-        signup: !!body.signup, // Anmeldung über Discord offen (solange Entwurf)
-        confirm: false, confirmMinutes: 10, groups: cleanGroups(null),
-        ...tournamentExtras(body),
-        members: {},
-        participants: cleanParticipants(body.participants || []),
-        playerIds: {},
-        order: [],
-        results: {},
-        status: 'draft',
-        createdAt: new Date().toISOString(),
-      };
-      Access.bindPlayers(db, t, false, chosenPlayers(t.participants, body.playerIds));
-      db.tournaments.unshift(t);
-      tournamentDiscord.changed(t);
-      save(); broadcast('tournament', t.id);
-      return send(res, 201, t);
-    }
-  }
-
-  const t = findTournament(parts[1]);
-
-  // /api/tournaments/:id
-  const tournamentView = () => {
-    if (isAdmin(req)) return t;
-    const { discord, discordStatus, announceError, log, referees, ...pub } = t;
-    const account = modules.accounts.current(req);
-    // Turnierleiter sehen das Protokoll und dürfen alle Spiele bearbeiten
-    if (account && Access.isReferee(db, account.id, t)) return { ...pub, log: log || [], referee: true, reportableMatches: [], mySides: {} };
-    // Eigene Teilnehmerplätze einmal bestimmen; ohne solche (z. B. anonym) entfällt die Spielplanberechnung ganz.
-    const own = Access.reportableSides(db, account && account.id, t);
-    const view = own.size ? cachedView(t) : null;
-    const mine = view ? view.matches.filter((m) => own.has(m.a) || own.has(m.b)) : [];
-    return { ...pub, reportableMatches: mine.map((m) => m.id), mySides: Object.fromEntries(mine.map((m) => [m.id, own.has(m.a) ? 'a' : 'b'])) };
-  };
-  if (parts.length === 2) {
-    if (method === 'GET') {
-      const admin = isAdmin(req);
-      if (t.status === 'draft' && !admin) throw new HttpError(404, 'Turnier nicht gefunden');
-      if (admin) return send(res, 200, t);
-      return send(res, 200, tournamentView());
-    }
-    if (method === 'PUT') {
-      requireAdmin(req);
-      const body = await readBody(req);
-      // Alle Eingaben vor jeder Änderung prüfen: eine abgelehnte Anfrage ändert nichts.
-      const names = body.participants !== undefined ? cleanParticipants(body.participants) : null;
-      const chosen = names ? chosenPlayers(names, body.playerIds) : {};
-      if (names && t.status !== 'draft' && names.length !== t.participants.length)
-        throw new HttpError(400, 'Während das Turnier läuft, können Teilnehmer nur umbenannt werden (gleiche Anzahl, gleiche Reihenfolge).');
-      const name = body.name !== undefined ? str(body.name) : undefined;
-      if (name === '') throw new HttpError(400, 'Name fehlt');
-      const game = body.game !== undefined ? str(body.game) : undefined;
-      const cs2 = body.cs2 !== undefined ? cleanCs2(body.cs2) : undefined;
-      const extras = tournamentExtras(body);
-      // Gruppenaufteilung, Setzplätze und Kosten stehen mit dem Start fest
-      if (t.status !== 'draft') for (const k of ['groups', 'seeds', 'coins']) delete extras[k];
-      if (name !== undefined) t.name = name;
-      Object.assign(t, extras);
-      if (extras.confirm === false && t.pending) t.pending = {};
-      if (game !== undefined) t.game = game;
-      const renames = Object.create(null); // für Discord: Kanäle umbenennen statt neu anlegen (Namen als reine Daten)
-      if (names) {
-        if (names.length === t.participants.length) {
-          names.forEach((n, i) => { if (n !== t.participants[i]) renames[t.participants[i]] = n; });
-        }
-        applyMembers(t, names, renames);
-        t.participants = names;
-        Access.bindPlayers(db, t, true, chosen);
-      }
-      if (body.discordEnabled !== undefined) t.discordEnabled = !!body.discordEnabled;
-      if (cs2 !== undefined) t.cs2 = cs2;
-      if (body.signup !== undefined) t.signup = !!body.signup;
-      if (body.teamSize !== undefined && t.status === 'draft') t.teamSize = cleanTeamSize(body.teamSize);
-      if (t.status === 'draft') {
-        if (body.type !== undefined) t.type = cleanType(body.type);
-        if (body.thirdPlace !== undefined) t.thirdPlace = !!body.thirdPlace;
-        if (body.gfReset !== undefined) t.gfReset = !!body.gfReset;
-      } else if (body.thirdPlace !== undefined && t.type === 'ko' && !!body.thirdPlace !== t.thirdPlace) {
-        t.thirdPlace = !!body.thirdPlace;
-        pruneStale(t);
-      }
-      tournamentDiscord.changed(t, renames);
-      save(); broadcast('tournament', t.id);
-      return send(res, 200, t);
-    }
-    if (method === 'DELETE') {
-      requireAdmin(req);
-      db.tournaments = db.tournaments.filter((x) => x !== t);
-      tournamentDiscord.removed(t);
-      save(); broadcast('tournament', t.id);
-      return send(res, 200, { ok: true });
-    }
-  }
-
-  // /api/tournaments/:id/start   – Setzliste festlegen und Turnier starten
-  if (parts[2] === 'start' && method === 'POST') {
-    requireAdmin(req);
-    const body = await readBody(req);
-    if (t.participants.length < 2) throw new HttpError(400, 'Mindestens 2 Teilnehmer nötig');
-    if (t.type === 'groups' && t.participants.length < 2 * cleanGroups(t.groups).count)
-      throw new HttpError(400, `Für ${cleanGroups(t.groups).count} Gruppen braucht es mindestens ${2 * cleanGroups(t.groups).count} Teilnehmer`);
-    const order = t.participants.map((_, i) => i);
-    Access.bindPlayers(db, t, true);
-    // Feste Setzplätze: die ersten N der Liste bleiben, der Rest wird ausgelost
-    const seeds = body.seeds !== undefined ? clampInt(body.seeds, 0, order.length, 0) : Math.min(t.seeds || 0, order.length);
-    if (body.shuffle) {
-      for (let i = order.length - 1; i > seeds; i--) {
-        const j = seeds + crypto.randomInt(i - seeds + 1);
-        [order[i], order[j]] = [order[j], order[i]];
-      }
-    }
-    t.seeds = seeds;
-    t.order = order;
-    t.results = {}; t.pending = {}; t.playing = {}; t.disqualified = [];
-    t.status = 'running';
-    logMatch(t, null, body.shuffle ? `Gestartet (Auslosung${seeds ? `, ${seeds} gesetzt` : ''})` : 'Gestartet (Setzliste)', 'Orga');
-    tournamentDiscord.started(t);
-    save(); broadcast('tournament', t.id);
-    return send(res, 200, t);
-  }
-
-  // /api/tournaments/:id/duplicate   – Kopie als neuer Entwurf (gleiche Teilnehmer & Einstellungen)
-  if (parts[2] === 'duplicate' && method === 'POST') {
-    requireAdmin(req);
-    const copy = {
-      id: crypto.randomBytes(5).toString('hex'),
-      name: (t.name + ' (Kopie)').slice(0, 100),
-      game: t.game, type: t.type, thirdPlace: t.thirdPlace, gfReset: t.gfReset,
-      discordEnabled: t.discordEnabled !== false,
-      teamSize: t.teamSize || 1, signup: false, cs2: t.cs2 ? { ...t.cs2 } : null,
-      groups: cleanGroups(t.groups), prizes: (t.prizes || []).slice(), coins: t.coins || 0, maxParticipants: t.maxParticipants || 0,
-      seeds: t.seeds || 0, confirm: !!t.confirm, confirmMinutes: t.confirmMinutes || 10, referees: (t.referees || []).slice(),
-      members: JSON.parse(JSON.stringify(t.members || {})),
-      participants: t.participants.slice(), playerIds: { ...(t.playerIds || {}) },
-      order: [], results: {}, status: 'draft',
-      createdAt: new Date().toISOString(),
-    };
-    db.tournaments.unshift(copy);
-    tournamentDiscord.changed(copy);
-    save(); broadcast('tournament', copy.id);
-    return send(res, 201, copy);
-  }
-
-  // /api/tournaments/:id/discord   – Discord-Kanäle manuell abgleichen
-  if (parts[2] === 'discord' && method === 'POST') {
-    requireAdmin(req);
-    if (!Discord.enabled) throw new HttpError(400, 'Discord ist nicht konfiguriert');
-    await tournamentDiscord.sync(t);
-    return send(res, 200, t);
-  }
-
-  // /api/tournaments/:id/reset   – zurück in den Entwurf
-  if (parts[2] === 'reset' && method === 'POST') {
-    requireAdmin(req);
-    const wasFinished = isFinished(t);
-    t.order = [];
-    t.results = {}; t.pending = {}; t.playing = {}; t.disqualified = [];
-    t.status = 'draft';
-    logMatch(t, null, 'Zurück auf Entwurf', 'Orga');
-    tournamentDiscord.reset(t, wasFinished);
-    save(); broadcast('tournament', t.id);
-    return send(res, 200, t);
-  }
-
-  // /api/tournaments/:id/disqualify   – Teilnehmer disqualifizieren bzw. zurücknehmen (Orga, Turnierleitung)
-  // Offene Spiele des Disqualifizierten gehen kampflos an den Gegner, gespielte Ergebnisse bleiben.
-  if (parts[2] === 'disqualify' && method === 'POST' && !parts[3]) {
-    const me = actor(req, t);
-    if (!me.manage) throw new HttpError(403, 'Nur Orga oder Turnierleitung');
-    const body = await readBody(req);
-    if (t.status !== 'running') throw new HttpError(400, 'Turnier läuft nicht');
-    const idx = Number(body.index);
-    if (!Number.isInteger(idx) || idx < 0 || idx >= t.participants.length) throw new HttpError(400, 'Unbekannter Teilnehmer');
-    const before = Bracket.compute(t);
-    const wasFinished = isFinished(t);
-    const set = new Set(t.disqualified || []);
-    if (body.on === false) set.delete(idx); else set.add(idx);
-    t.disqualified = [...set].sort((x, y) => x - y);
-    pruneStale(t);
-    logMatch(t, null, `${t.participants[idx]} ${body.on === false ? 'nicht mehr disqualifiziert' : 'disqualifiziert'}`, me.name);
-    tournamentDiscord.disqualified(t, { index: idx, on: body.on !== false, before, wasFinished });
-    save(); broadcast('tournament', t.id);
-    return send(res, 200, tournamentView());
-  }
-
-  // /api/tournaments/:id/draw-teams   – Teams aus Einzelanmeldungen auslosen (Entwurf, Orga)
-  // body: { size, balanced } – balanced: nach Setzliste im Schlangenmuster verteilen, sonst zufällig
-  if (parts[2] === 'draw-teams' && method === 'POST') {
-    requireAdmin(req);
-    const body = await readBody(req);
-    if (t.status !== 'draft') throw new HttpError(400, 'Teams lassen sich nur im Entwurf auslosen');
-    if ((t.teamSize || 1) > 1) throw new HttpError(400, 'Das Turnier hat schon Teams – auslosen geht aus Einzelanmeldungen');
-    const size = clampInt(body.size, 2, 20, 2);
-    const players = t.participants.slice();
-    const count = Math.ceil(players.length / size);
-    if (count < 2) throw new HttpError(400, `Für Teams à ${size} braucht es mindestens ${size + 1} Spieler`);
-    if (!body.balanced) {
-      for (let i = players.length - 1; i > 0; i--) { const j = crypto.randomInt(i + 1); [players[i], players[j]] = [players[j], players[i]]; }
-    }
-    const teams = Bracket.groupSplit(players, count); // Schlangenmuster: gleich große, ausgeglichene Teams
-    const names = teams.map((list, i) => { const n = list.join(' & '); return n.length <= 60 ? n : `Team ${i + 1}`; });
-    const bound = t.playerIds || {};
-    t.members = Object.fromEntries(teams.map((list, i) => [names[i], list.map((p) => (Object.hasOwn(bound, p) ? bound[p] : null)).filter(Boolean)]));
-    t.teamSize = size;
-    t.participants = names;
-    t.playerIds = {};
-    Access.bindPlayers(db, t);
-    logMatch(t, null, `${count} Teams à bis zu ${size} ausgelost${body.balanced ? ' (nach Setzliste)' : ''}`, 'Orga');
-    tournamentDiscord.changed(t);
-    save(); broadcast('tournament', t.id);
-    return send(res, 200, t);
-  }
-
-  // /api/tournaments/:id/matches/:mid[/confirm|/dispute|/forfeit|/playing]
-  if (parts[2] === 'matches' && parts[3] && parts.length <= 5) {
-    // Methode und Zugang vor der Spielplanberechnung prüfen, damit anonyme oder unzulässige Anfragen
-    // keine vollständige Berechnung auslösen.
-    const action = parts[4] || '';
-    if (!['', 'confirm', 'dispute', 'forfeit', 'playing'].includes(action)) throw new HttpError(404, 'Nicht gefunden');
-    if (action ? method !== 'POST' : (method !== 'POST' && method !== 'DELETE')) throw new HttpError(405, 'Methode nicht erlaubt');
-    const admin = isAdmin(req);
-    const account = modules.accounts.current(req);
-    const me = { admin, discordId: account ? account.id : null }; // Rechte prüft das Turniermodul
-    if (!admin) { Security.rateLimit(req, 'result', 30, 60000); modules.accounts.requireUser(req); }
-    if ((method === 'DELETE' || action === 'forfeit') && !tournaments.canManage(me, t)) throw new HttpError(401, 'Nur Orga oder Turnierleitung');
-    // Erst den vollständigen Body abwarten, danach den aktuellen Zustand atomar prüfen/ändern.
-    const body = method === 'POST' ? await readBody(req) : null;
-    const ops = tournaments.of(modules.event.scoped());
-    if (method === 'DELETE') ops.clearResult(me, t, parts[3]);
-    else if (action === 'playing') ops.setPlaying(me, t, parts[3], body.on);
-    else if (action === 'forfeit') ops.forfeit(me, t, parts[3], body.side);
-    else if (action === 'confirm') ops.confirmResult(me, t, parts[3]);
-    else if (action === 'dispute') ops.disputeResult(me, t, parts[3]);
-    else ops.reportResult(me, t, parts[3], { a: body.a, b: body.b });
-    return send(res, 200, tournamentView());
   }
 
   throw new HttpError(404, 'Nicht gefunden');
@@ -790,6 +512,7 @@ ctx.people = modules.people = require('./lib/people.js')(ctx);
 modules.info = require('./lib/info.js')(ctx);
 modules.details = require('./lib/details.js')(ctx);
 modules.servers = require('./lib/servers.js')(ctx);
+modules.tournaments = tournaments; // /api/tournaments (ausgeschaltet nur für die Orga sichtbar)
 modules.cs2 = require('./lib/tmt.js')(ctx); // CS2-Matches über TMT2 (eigener Container)
 ctx.accounts = modules.accounts = require('./lib/accounts.js')(ctx);
 ctx.tickets = modules.tickets = require('./lib/tickets.js')(ctx);

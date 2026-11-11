@@ -86,11 +86,11 @@ function teamSetup() {
   const commands = require('../lib/commands')({ ...ctx, tournaments, announcements: {}, schedule: {}, mayViewDiscord: () => true });
   const t = { id: 'teams', name: 'Teams', type: 'ko', status: 'draft', signup: true, teamSize: 2, participants: [], members: {}, order: [], results: {} };
   db.tournaments.push(t);
-  return { t, tournaments, team: (sub, user, opts) => commands.find('team').run({ sub, user, opts: { turnier: 'teams', ...opts } }) };
+  return { t, tournaments, event: db.events[0], team: (sub, user, opts) => commands.find('team').run({ sub, user, opts: { turnier: 'teams', ...opts } }) };
 }
 
 test('/team: reserved team names are stored as normal data through found, join, rename and leave', () => {
-  const { t, tournaments, team } = teamSetup();
+  const { t, tournaments, event, team } = teamSetup();
   const users = [1, 2, 3, 4].map((n) => ({ id: `20000000000000000${n}`, name: `Player ${n}` }));
   team('gruenden', users[0], { name: '__proto__' });
   team('gruenden', users[1], { name: 'constructor' });
@@ -103,14 +103,13 @@ test('/team: reserved team names are stored as normal data through found, join, 
   assert.throws(() => team('beitreten', users[3], { team: '__proto__' }), /schon voll/);
   assert.equal(Object.hasOwn(t.members, 'toString'), false);
 
-  const renames = Object.create(null);
-  renames.constructor = 'Builders';
-  tournaments.applyMembers(t, ['__proto__', 'Builders'], renames);
+  // Orga benennt „constructor“ im Turnierformular um: die Mitglieder wandern mit
+  const ops = tournaments.of(event);
+  ops.update({ admin: true }, t, { participants: ['__proto__', 'Builders'] });
   assert.deepEqual(Object.keys(t.members).sort(), ['Builders', '__proto__']);
-  tournaments.applyMembers(t, ['__proto__', 'Builders']); // ohne Umbenennungen: Standard-{} darf keine Prototyp-Treffer liefern
+  ops.setParticipants(t, ['__proto__', 'Builders']); // ohne Umbenennungen: Standard-{} darf keine Prototyp-Treffer liefern
   assert.deepEqual(Object.keys(t.members).sort(), ['Builders', '__proto__']);
-
-  t.participants = ['__proto__', 'Builders'];
+  assert.deepEqual(t.participants, ['__proto__', 'Builders']);
   assert.match(team('verlassen', users[2], {}), /verlassen/);
   assert.match(team('verlassen', users[0], {}), /war leer/);
   assert.deepEqual(t.participants, ['Builders']);
