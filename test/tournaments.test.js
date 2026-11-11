@@ -283,3 +283,35 @@ test('Personen: Umbenennen folgt nur gebundenen Einzeleinträgen, Zusammenführe
   assert.equal(single.playerIds.Alicia, 'b');
   assert.deepEqual(team.members.Team, ['b'], 'no duplicate member');
 });
+
+test('Person vergessen: gebundener Eintrag bleibt als ungebundener Name stehen', () => {
+  const single = { id: 's', participants: ['Alice', 'Bob'], playerIds: { Alice: 'a', Bob: 'b' }, members: {} };
+  const { of } = tournamentModule({ event: { tournaments: [single] } });
+  of.forgetPerson('a');
+  assert.deepEqual(single.participants, ['Alice', 'Bob']);
+  assert.deepEqual(single.playerIds, { Alice: null, Bob: 'b' });
+});
+
+test('Person vergessen: verlässt ihre Teams, das Team bleibt eingetragen', () => {
+  const team = { id: 't', teamSize: 2, participants: ['Team'], playerIds: { Team: null }, members: { Team: ['a', 'b'] } };
+  const { of } = tournamentModule({ event: { tournaments: [team] } });
+  of.forgetPerson('a');
+  assert.deepEqual(team.members, { Team: ['b'] });
+  assert.deepEqual(team.participants, ['Team']);
+});
+
+test('Person vergessen: ist kein Turnierleiter mehr', () => {
+  const t = { id: 'r', participants: [], playerIds: {}, members: {}, referees: ['a', 'ref'] };
+  const { of } = tournamentModule({ event: { tournaments: [t] } });
+  of.forgetPerson('a');
+  assert.deepEqual(t.referees, ['ref']);
+});
+
+test('Zusammenführen: Zielperson übernimmt die Turnierleitung, ohne Dopplung', () => {
+  const only = { id: 'o', participants: [], playerIds: {}, members: {}, referees: ['a'] };
+  const both = { id: 'b', participants: [], playerIds: {}, members: {}, referees: ['a', 'b'] };
+  const { of } = tournamentModule({ event: { tournaments: [only, both] } });
+  of.mergePersons('a', 'b');
+  assert.deepEqual(only.referees, ['b']);
+  assert.deepEqual(both.referees, ['b']);
+});
