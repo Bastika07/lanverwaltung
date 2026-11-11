@@ -17,8 +17,13 @@ test('CI: code checks reject malformed JavaScript and invalid project JSON', (t)
   fs.writeFileSync(path.join(root, 'ops/assessment-api.json'), '{}');
   const run = () => spawnSync(process.execPath, [path.join(root, 'ops/check-code.cjs')], { encoding: 'utf8' });
   assert.equal(run().status, 0);
+  assert.match(run().stdout, /^Checked \d+ JavaScript files/m);
   fs.writeFileSync(path.join(root, 'bad.js'), 'const = ;');
-  assert.notEqual(run().status, 0, 'syntax errors must fail CI');
+  const bad = run();
+  assert.notEqual(bad.status, 0, 'syntax errors must fail CI');
+  // Die letzte Zeile muss den Fehler nennen, nicht wie ein Erfolg aussehen (wer nur das Ende liest, sieht ihn)
+  assert.match(bad.stderr.trim().split('\n').at(-1), /^FEHLER: Syntaxfehler in 1 von \d+ Dateien/);
+  assert.doesNotMatch(bad.stdout, /Checked/);
   fs.unlinkSync(path.join(root, 'bad.js'));
   fs.writeFileSync(path.join(root, 'package.json'), '{broken');
   assert.notEqual(run().status, 0, 'invalid JSON must fail CI');

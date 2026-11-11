@@ -49,6 +49,19 @@ Sie schützt ausschließlich `main`: Pull Request erforderlich, alle 15 CI-Check
 
 Die vorhandenen Checknamen und die GitHub-Actions-App-ID wurden gegen die tatsächlichen Check-Runs des Repositorys geprüft; der neue ZAP-Check entspricht dem Jobnamen im Workflow. Bei Umbenennung eines CI-Jobs auch Ruleset und Vorlage aktualisieren. Erst aktivieren, wenn der DAST-Workflow im PR vorhanden ist und alle Checks erfolgreich gelaufen sind. Nur ein Push auf diesen Featurebranch startet wegen der Branchfilter noch keine CI: Dafür einen Pull Request gegen `main` öffnen. CodeQL muss Ergebnisse für den PR und den Zielbranch haben. Bestehende Befunde können den Merge blockieren; dann bewerten und beheben, nicht das Gate blind abschwächen. Die Code-Scanning-Regel muss vom GitHub-Tarif und der Repository-Konfiguration unterstützt werden.
 
+## PR blockiert oder ohne Checks
+
+- **„no checks reported“:** Meist ein Konflikt mit `main`. GitHub startet `pull_request`-Workflows nur, wenn sich der Merge-Commit bilden lässt. Den Branch auf aktuellem `origin/main` neu aufsetzen.
+- **Blockiert trotz grüner Checks:** Das Ruleset sperrt bei offenen CodeQL-Funden (Fehler bzw. Sicherheit ab „mittel“) im PR und bei unaufgelösten Review-Threads. Beides abfragen (`<n>` = PR-Nummer):
+
+  ```sh
+  gh api "repos/{owner}/{repo}/code-scanning/alerts?ref=refs/pull/<n>/merge&state=open" \
+    --jq '.[] | [.number, .rule.id, .most_recent_instance.location.path, .most_recent_instance.location.start_line] | @tsv'
+  gh api graphql -f query='query{repository(owner:"Bastika07",name:"lanverwaltung"){pullRequest(number:<n>){reviewThreads(first:50){nodes{isResolved comments(first:1){nodes{path body}}}}}}}'
+  ```
+
+  Ein Fund gilt erst als behoben, wenn die Analyse des aktuellen Merge-Commits ihn nicht mehr meldet (`code-scanning/analyses?ref=refs/pull/<n>/merge`). Der Review-Thread des CodeQL-Bots löst sich danach selbst.
+
 ## Dependency-Updates
 
 `.github/dependabot.yml` erstellt wöchentlich Update-PRs für GitHub Actions und das Docker-Basisimage. Actions bleiben auf Commit-SHAs, das Node-Image auf einen Digest fixiert. Node-Hauptversionssprünge benötigen eine bewusste Umstellung. Es gibt keine automatischen Merges oder Deployments. Der lokal gebündelte Markdown-Parser und das in `ops/scan-image.sh` fixierte Trivy-Image müssen separat geprüft und aktualisiert werden; Dependabot erfasst diese Shell-/Vendor-Dateien nicht.
