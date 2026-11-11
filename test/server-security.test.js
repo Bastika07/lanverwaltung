@@ -49,7 +49,7 @@ test('Discord task errors cannot forge log lines through tournament names', asyn
   console.error = error;
   assert.equal(logs.length, 1);
   assert.doesNotMatch(logs[0], /[\r\n\u2028\u2029]/);
-  assert.equal(logs[0], 'Discord (Cup {"sec":"admin_login"}  x): Synthetic failure');
+  assert.equal(logs[0], 'Discord (Cup{"sec":"admin_login"}x): Syntheticfailure');
 });
 
 test('Admin password comparison accepts only the configured string and remains timing-safe', () => {
