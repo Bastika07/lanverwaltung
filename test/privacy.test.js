@@ -23,6 +23,7 @@ test('account deletion pseudonymizes only the linked person and preserves other 
   ctx.tournaments = tournamentModule({ db, notifier: discordSide({ event: db.events[0] }).side }).tournaments;
   ctx.people = require('../lib/people')(ctx);
   ctx.tickets = require('../lib/tickets')(ctx);
+  ctx.servers = require('../lib/servers')(ctx); // Gastserver: Sperre und Entkopplung bei Kontolöschung
   const codeBefore = db.events[0].orders[0].tickets.map((t) => t.code);
   eraseAccount(ctx, account);
   assert.equal(saved, 0, 'the route saves the completed deletion once, not intermediate states');
