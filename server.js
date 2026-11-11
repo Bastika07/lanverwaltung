@@ -252,12 +252,8 @@ function str(v, max = 100) {
 // ---------- Turnierleitung, Protokoll, Ergebnisse ----------
 // Wer handelt: Orga (Admin), Turnierleiter dieses Turniers oder ein Spieler (mit seiner Person)
 function actor(req, t) {
-  const admin = isAdmin(req);
   const account = modules.accounts && modules.accounts.current(req);
-  const referee = !admin && !!account && Access.isReferee(db, account.id, t);
-  const person = account ? (db.persons || []).find((p) => p.discordId === account.id) : null;
-  const name = admin ? 'Orga' : person ? person.name + (referee ? ' (Turnierleitung)' : '') : 'Unbekannt';
-  return { admin, referee, manage: admin || referee, account, name };
+  return { ...tournaments.role({ admin: isAdmin(req), discordId: account ? account.id : null }, t), account };
 }
 
 // ---------- Coins ----------
@@ -311,10 +307,10 @@ function discordPost(text, onResult, kind = 'general', users = [], opts = {}) {
 const tournamentDiscord = require('./lib/tournament-discord.js')({ Discord, settings, moduleOn, people: () => modules.people,
   events: () => modules.event, discordPost, save, broadcast, publicUrl: PUBLIC_URL });
 const tournaments = require('./lib/tournaments.js')({ db, save, broadcast, HttpError, str, notifier: tournamentDiscord, revision: () => revision });
-const { cleanParticipants, cleanType, cleanGroups, cleanTeamSize, cleanCs2, tournamentExtras, pruneStale, logMatch, commitResult,
+const { cleanParticipants, cleanType, cleanGroups, cleanTeamSize, cleanCs2, tournamentExtras, pruneStale, logMatch,
   applyMembers, chosenPlayers, summary } = tournaments;
 const cachedView = tournaments.view;
-const { isFinished, drawAllowed, clampInt } = require('./lib/tournaments.js');
+const { isFinished, clampInt } = require('./lib/tournaments.js');
 
 // Offene Meldungen ohne Einspruch gelten nach t.confirmMinutes automatisch (alle Events)
 const autoConfirm = () => { for (const e of modules.event ? modules.event.all() : []) tournaments.of(e).autoConfirm(); };
@@ -694,98 +690,20 @@ async function api(req, res, url) {
     const action = parts[4] || '';
     if (!['', 'confirm', 'dispute', 'forfeit', 'playing'].includes(action)) throw new HttpError(404, 'Nicht gefunden');
     if (action ? method !== 'POST' : (method !== 'POST' && method !== 'DELETE')) throw new HttpError(405, 'Methode nicht erlaubt');
-    const me = actor(req, t);
-    if (!me.admin) { Security.rateLimit(req, 'result', 30, 60000); modules.accounts.requireUser(req); }
-    if ((method === 'DELETE' || action === 'forfeit') && !me.manage) throw new HttpError(401, 'Nur Orga oder Turnierleitung');
+    const admin = isAdmin(req);
+    const account = modules.accounts.current(req);
+    const me = { admin, discordId: account ? account.id : null }; // Rechte prüft das Turniermodul
+    if (!admin) { Security.rateLimit(req, 'result', 30, 60000); modules.accounts.requireUser(req); }
+    if ((method === 'DELETE' || action === 'forfeit') && !tournaments.canManage(me, t)) throw new HttpError(401, 'Nur Orga oder Turnierleitung');
     // Erst den vollständigen Body abwarten, danach den aktuellen Zustand atomar prüfen/ändern.
     const body = method === 'POST' ? await readBody(req) : null;
-    if (t.status !== 'running') throw new HttpError(400, 'Turnier läuft nicht');
-    const view = Bracket.compute(t);
-    const m = view.matches.find((x) => x.id === parts[3]);
-    if (!m) throw new HttpError(404, 'Spiel nicht gefunden');
-    const side = me.manage ? null : Access.sideOf(db, me.account.id, t, m);
-    if (!me.manage && !side) throw new HttpError(403, 'Nur beteiligte Spieler oder Teammitglieder dürfen das Ergebnis eintragen');
-
-    if (method === 'DELETE') {
-      if (!t.results[m.id]) throw new HttpError(400, 'Für dieses Spiel gibt es kein Ergebnis');
-      const wasFinished = isFinished(t);
-      delete t.results[m.id];
-      pruneStale(t);
-      logMatch(t, m, 'Ergebnis gelöscht', me.name);
-      tournamentDiscord.resultCleared(t, m, wasFinished);
-      save(); broadcast('tournament', t.id);
-      return send(res, 200, me.admin ? t : tournamentView());
-    }
-
-    if (action === 'playing') {
-      if (m.status !== 'ready') throw new HttpError(400, 'Spiel ist nicht spielbereit');
-      t.playing = t.playing || {};
-      if (body.on === false) delete t.playing[m.id];
-      else t.playing[m.id] = { pa: m.a, pb: m.b, at: new Date().toISOString() };
-      logMatch(t, m, body.on === false ? 'Läuft nicht mehr' : 'Spiel läuft', me.name);
-      save(); broadcast('tournament', t.id);
-      return send(res, 200, tournamentView());
-    }
-
-    if (action === 'forfeit') {
-      if (m.status !== 'ready' && m.status !== 'done') throw new HttpError(400, 'Spiel ist noch nicht bereit');
-      if (body.side !== 'a' && body.side !== 'b') throw new HttpError(400, 'Wer hat verloren? side: "a" oder "b"');
-      if (m.status === 'done' && m.wo === body.side && !m.dq) return send(res, 200, tournamentView());
-      commitResult(t, view, m, { a: 0, b: 0, wo: body.side }, me.name, 'Gewertet:');
-      return send(res, 200, tournamentView());
-    }
-
-    const p = t.pending && t.pending[m.id];
-    const pend = p && p.pa === m.a && p.pb === m.b ? p : null;
-    if (action === 'confirm' || action === 'dispute') {
-      if (m.status !== 'ready' || !pend) throw new HttpError(400, 'Für dieses Spiel wartet keine Meldung auf Bestätigung');
-      if (!me.manage && pend.by === side) throw new HttpError(403, 'Bestätigen muss die Gegenseite');
-      if (!me.manage && pend.disputed) throw new HttpError(409, 'Das Ergebnis ist strittig – die Turnierleitung entscheidet.');
-      if (action === 'confirm') {
-        commitResult(t, view, m, { a: pend.a, b: pend.b }, me.name, 'Bestätigt:');
-        return send(res, 200, tournamentView());
-      }
-      pend.disputed = true;
-      logMatch(t, m, `Meldung ${pend.a}:${pend.b} bestritten`, me.name);
-      tournamentDiscord.resultDisputed(t, m, pend);
-      save(); broadcast('tournament', t.id);
-      return send(res, 200, tournamentView());
-    }
-
-    // Ergebnis melden bzw. (Orga, Turnierleitung) eintragen oder korrigieren
-    if (m.status === 'done' && !me.manage)
-      throw new HttpError(409, 'Für dieses Spiel ist bereits ein Ergebnis eingetragen. Korrekturen nur durch die Turnierleitung.');
-    if (m.status !== 'ready' && m.status !== 'done') throw new HttpError(400, 'Spiel ist noch nicht bereit');
-    const score = (v) => ['number', 'string'].includes(typeof v) ? Number(v) : NaN;
-    const a = score(body.a), b = score(body.b);
-    if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0 || a > 9999 || b > 9999)
-      throw new HttpError(400, 'Bitte ganze Zahlen ≥ 0 eingeben');
-    if (!drawAllowed(t, m) && a === b) throw new HttpError(400, 'Im K.-o.-System ist kein Unentschieden möglich');
-    if (m.status === 'done' && m.score && m.score.a === a && m.score.b === b) return send(res, 200, tournamentView()); // unverändert
-    if (me.manage || !t.confirm) {
-      commitResult(t, view, m, { a, b }, me.name, m.status === 'done' ? 'Korrigiert:' : me.manage ? 'Eingetragen:' : 'Gemeldet:');
-      return send(res, 200, tournamentView());
-    }
-    // Bestätigung durch die Gegenseite: gleiche Meldung der Gegenseite gilt sofort, abweichende ist ein Streitfall
-    if (pend && pend.by !== side) {
-      if (pend.a === a && pend.b === b) {
-        commitResult(t, view, m, { a, b }, me.name, 'Beide Seiten gemeldet:');
-        return send(res, 200, tournamentView());
-      }
-      pend.disputed = true;
-      pend.counter = { a, b };
-      logMatch(t, m, `Abweichende Meldung ${a}:${b} (vorher ${pend.a}:${pend.b})`, me.name);
-      tournamentDiscord.resultDisputed(t, m, pend, { a, b });
-      save(); broadcast('tournament', t.id);
-      return send(res, 200, tournamentView());
-    }
-    if (pend && pend.disputed) throw new HttpError(409, 'Das Ergebnis ist strittig – die Turnierleitung entscheidet.');
-    t.pending = t.pending || {};
-    t.pending[m.id] = { a, b, pa: m.a, pb: m.b, by: side, at: new Date().toISOString() };
-    logMatch(t, m, `Gemeldet ${a}:${b}, wartet auf Bestätigung`, me.name);
-    const other = side === 'a' ? m.b : m.a;
-    tournamentDiscord.resultPending(t, m, { a, b, other });
-    save(); broadcast('tournament', t.id);
+    const ops = tournaments.of(modules.event.scoped());
+    if (method === 'DELETE') ops.clearResult(me, t, parts[3]);
+    else if (action === 'playing') ops.setPlaying(me, t, parts[3], body.on);
+    else if (action === 'forfeit') ops.forfeit(me, t, parts[3], body.side);
+    else if (action === 'confirm') ops.confirmResult(me, t, parts[3]);
+    else if (action === 'dispute') ops.disputeResult(me, t, parts[3]);
+    else ops.reportResult(me, t, parts[3], { a: body.a, b: body.b });
     return send(res, 200, tournamentView());
   }
 

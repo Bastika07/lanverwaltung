@@ -15,11 +15,14 @@ test('Turniermodul: of(event) arbeitet nur auf den Turnieren dieses Events', () 
   assert.deepEqual(tournaments.of({ tournaments: [other] }).openForSignup(), [other]);
 });
 
+const tmt2 = { tmt2: true };
+const fromTmt = (of, t, m, a, b, pa = m.a, pb = m.b) => of.reportResult(tmt2, t, m.id, { a, b, pa, pb });
+
 test('reportResult (TMT2): trägt ein offenes Spiel einmal ein, speichert einmal und meldet es dem notifier', () => {
   const t = running();
   const { of, saves, notes, broadcasts } = tournamentModule({ event: { tournaments: [t] } });
   const m = Bracket.playable(Bracket.compute(t))[0];
-  assert.equal(of.reportResult(t, m.id, 2, 1, m.a, m.b), null);
+  fromTmt(of, t, m, 2, 1);
   assert.deepEqual({ a: t.results[m.id].a, b: t.results[m.id].b }, { a: 2, b: 1 });
   assert.equal(saves.length, 1);
   assert.deepEqual(broadcasts, [['tournament', 'cup']]);
@@ -30,7 +33,9 @@ test('reportResult (TMT2): trägt ein offenes Spiel einmal ein, speichert einmal
   assert.equal(info.matchId, m.id);
   assert.equal(info.correction, false);
   assert.equal(info.wasFinished, false);
-  assert.equal(of.reportResult(t, m.id, 2, 1, m.a, m.b), null, 'same result again is accepted without change');
+  assert.equal(info.after.matches.find((x) => x.id === m.id).status, 'done', 'notifier gets the view after the change');
+  assert.match(t.log.at(-1).by, /TMT2/);
+  fromTmt(of, t, m, 2, 1); // gleiches Ergebnis noch einmal: angenommen, ohne Änderung
   assert.equal(saves.length, 1);
 });
 
@@ -38,12 +43,12 @@ test('reportResult (TMT2): abgelehnte Meldungen ändern nichts und speichern nic
   const t = running();
   const { of, saves, notes } = tournamentModule({ event: { tournaments: [t] } });
   const m = Bracket.playable(Bracket.compute(t))[0];
-  assert.match(of.reportResult(t, m.id, 1, 1, m.a, m.b), /Kein eindeutiger Sieger/);
-  assert.match(of.reportResult(t, m.id, 2, 1, m.b, m.a), /Paarung hat sich geändert/);
-  assert.match(of.reportResult(t, 'missing', 2, 1, m.a, m.b), /nicht mehr im Turnierbaum/);
-  assert.match(of.reportResult({ ...t, status: 'draft' }, m.id, 2, 1, m.a, m.b), /läuft nicht/);
-  of.reportResult(t, m.id, 2, 1, m.a, m.b);
-  assert.match(of.reportResult(t, m.id, 0, 2, m.a, m.b), /schon ein anderes Ergebnis/, 'never a correction');
+  assert.throws(() => fromTmt(of, t, m, 1, 1), /Kein eindeutiger Sieger – Ergebnis bitte von Hand eintragen/);
+  assert.throws(() => fromTmt(of, t, m, 2, 1, m.b, m.a), /Paarung hat sich geändert/);
+  assert.throws(() => of.reportResult(tmt2, t, 'missing', { a: 2, b: 1, pa: m.a, pb: m.b }), /nicht mehr im Turnierbaum/);
+  assert.throws(() => fromTmt(of, { ...t, status: 'draft' }, m, 2, 1), /läuft nicht/);
+  fromTmt(of, t, m, 2, 1);
+  assert.throws(() => fromTmt(of, t, m, 0, 2), /schon ein anderes Ergebnis/, 'never a correction');
   assert.equal(t.results[m.id].a, 2);
   assert.equal(saves.length, 1);
   assert.equal(notes.length, 1);
@@ -81,4 +86,64 @@ test('autoConfirm: abgelaufene Meldungen gelten, bestrittene und veraltete nicht
   assert.deepEqual(notes.map(([name]) => name), ['resultReported']);
   assert.equal(saves.length, 1);
   assert.match(t.log.at(-1).text, /automatisch bestätigt/);
+});
+
+// Zwei gebundene Spieler, ein Turnierleiter und ein Unbeteiligter (synthetische Discord-IDs)
+function withPlayers(extra = {}) {
+  const persons = [['pa', 'Synthetic A', '100000000000000001'], ['pb', 'Synthetic B', '100000000000000002'], ['pc', 'Synthetic C', '100000000000000003'],
+    ['pd', 'Synthetic D', '100000000000000004'], ['ref', 'Synthetic Referee', '100000000000000009'], ['out', 'Synthetic Outsider', '100000000000000008']]
+    .map(([id, name, discordId]) => ({ id, name, discordId }));
+  const t = running({ playerIds: { 'Synthetic A': 'pa', 'Synthetic B': 'pb', 'Synthetic C': 'pc', 'Synthetic D': 'pd' }, referees: ['ref'], ...extra });
+  const mod = tournamentModule({ db: { persons }, event: { tournaments: [t] } });
+  const m = Bracket.playable(Bracket.compute(t))[0];
+  // Rollen: Seite a und b dieses Spiels, ein Spieler eines anderen Spiels, Turnierleiter, Unbeteiligter
+  const ids = { a: t.playerIds[t.participants[m.a]], b: t.playerIds[t.participants[m.b]], ref: 'ref', out: 'out',
+    other: Object.values(t.playerIds).find((id) => ![t.participants[m.a], t.participants[m.b]].some((n) => t.playerIds[n] === id)) };
+  const as = (role) => ({ discordId: persons.find((p) => p.id === ids[role]).discordId });
+  return { t, m, as, ...mod };
+}
+
+test('Akteure: Spieler melden nur eigene Spiele, Leitung nur Turnierleitung, TMT2 nur Ergebnisse', () => {
+  const { t, m, as, of, saves, HttpError } = withPlayers();
+  const rejects = (fn, status) => assert.throws(fn, (err) => err instanceof HttpError && err.status === status);
+  rejects(() => of.reportResult(as('out'), t, m.id, { a: 2, b: 0 }), 403);
+  rejects(() => of.reportResult(as('other'), t, m.id, { a: 2, b: 0 }), 403);
+  rejects(() => of.forfeit(as('a'), t, m.id, 'b'), 401);
+  rejects(() => of.clearResult(as('a'), t, m.id), 401);
+  for (const op of ['confirmResult', 'disputeResult', 'clearResult']) assert.throws(() => of[op](tmt2, t, m.id), HttpError, op);
+  assert.throws(() => of.setPlaying(tmt2, t, m.id, true), HttpError);
+  assert.throws(() => of.forfeit(tmt2, t, m.id, 'a'), HttpError);
+  assert.equal(saves.length, 0, 'no rejected call saves');
+  assert.deepEqual(t.results, {});
+
+  of.forfeit(as('ref'), t, m.id, 'b');
+  assert.equal(t.results[m.id].wo, 'b');
+  assert.match(t.log.at(-1).by, /Synthetic Referee \(Turnierleitung\)/);
+  of.clearResult({ admin: true }, t, m.id);
+  assert.equal(t.results[m.id], undefined);
+  assert.equal(t.log.at(-1).by, 'Orga');
+});
+
+test('Bestätigung: Meldung wartet, nur die Gegenseite bestätigt, abweichende Meldung ist strittig', () => {
+  const { t, m, as, of, notes, HttpError } = withPlayers({ confirm: true });
+  of.reportResult(as('a'), t, m.id, { a: 2, b: 1 });
+  assert.equal(t.results[m.id], undefined, 'pending, not committed');
+  assert.equal(t.pending[m.id].by, 'a');
+  assert.throws(() => of.confirmResult(as('a'), t, m.id), (err) => err instanceof HttpError && err.status === 403);
+  of.reportResult(as('b'), t, m.id, { a: 1, b: 2 });
+  assert.equal(t.pending[m.id].disputed, true);
+  assert.throws(() => of.confirmResult(as('b'), t, m.id), (err) => err instanceof HttpError && err.status === 409);
+  of.confirmResult(as('ref'), t, m.id);
+  assert.deepEqual({ a: t.results[m.id].a, b: t.results[m.id].b }, { a: 2, b: 1 });
+  assert.deepEqual(notes.map(([name]) => name), ['resultPending', 'resultDisputed', 'resultReported']);
+});
+
+test('Ergebnis melden berechnet den Spielplan zweimal: vorher und nachher', (t) => {
+  const compute = Bracket.compute;
+  const { t: tour, m, of } = withPlayers();
+  let calls = 0;
+  Bracket.compute = (x) => { calls++; return compute(x); };
+  t.after(() => { Bracket.compute = compute; });
+  of.reportResult({ admin: true }, tour, m.id, { a: 2, b: 0 });
+  assert.equal(calls, 2);
 });
