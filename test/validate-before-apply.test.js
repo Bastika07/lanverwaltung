@@ -54,3 +54,43 @@ test('Einstellungen: ungültige DMX-Adresse lässt Module und Texte unverändert
   assert.notEqual(db.meta.settings.modules.catering, true);
   for (const e of db.events) assert.notEqual(e.modules.catering, true, e.id);
 });
+
+test('Infos: ungültiger Spiel-Link lässt WLAN und Server unverändert', async (t) => {
+  const app = await isolated(t);
+  const db = await rejectedThenSaved(app, '/api/info', { wifi: { ssid: 'Synthetic-Neu' }, servers: [{ name: 'Synthetic-Server' }],
+    games: [{ name: 'Synthetic-Spiel', link: 'www.example.invalid' }] });
+  for (const e of db.events) {
+    assert.notEqual(e.info.wifi.ssid, 'Synthetic-Neu', e.id);
+    assert.deepEqual(e.info.servers, [], e.id);
+  }
+});
+
+test('Ticket-Inhaber: ungültiger Clan lässt Inhaber und Person unverändert', async (t) => {
+  const app = await isolated(t);
+  const r = await app.request('/api/tickets/orders/first-buyer/holders', { method: 'PUT', user: 'buyer',
+    body: { holders: { 'first-ticket-buyer': 'Synthetic-Neu' }, clans: { 'first-ticket-buyer': { not: 'text' } } } });
+  assert.equal(r.status, 400, JSON.stringify(r.data));
+  assert.equal((await app.request('/api/tickets/settings', { method: 'PUT', admin: true, body: { payDays: 14 } })).status, 200);
+  const db = app.snapshot();
+  assert.equal(db.events[0].orders.find((o) => o.id === 'first-buyer').tickets[0].holder, 'buyer');
+  assert.equal(db.persons.find((p) => p.id === 'buyer').name, 'buyer');
+});
+
+test('Sammelübernahme: ein ungültiger Eintrag legt keine der übrigen Personen an', async (t) => {
+  const app = await isolated(t);
+  for (const body of [{ names: ['Synthetic-A', { not: 'text' }] }, { names: ['Synthetic-A'], personIds: 5 }]) {
+    const r = await app.request('/api/people', { method: 'POST', admin: true, body });
+    assert.equal(r.status, 400, JSON.stringify(body));
+  }
+  assert.equal((await app.request('/api/tickets/settings', { method: 'PUT', admin: true, body: { payDays: 14 } })).status, 200);
+  assert.equal(app.snapshot().persons.some((p) => p.name === 'Synthetic-A'), false);
+});
+
+test('Zahlung bestätigen: ungültiger Host verhindert nur den Link, nicht die Bestätigung', async (t) => {
+  const app = await isolated(t, { env: { TRUST_PROXY: '1', TRUSTED_PROXIES: '127.0.0.1' },
+    prepare: (data) => { Object.assign(data.events[0].orders.find((o) => o.id === 'first-buyer'), { status: 'pending', dueAt: new Date(Date.now() + 86400000).toISOString() }); } });
+  const r = await app.request('/api/tickets/orders/first-buyer/paid', { method: 'POST', admin: true, body: { paid: true },
+    headers: { 'X-Forwarded-Host': 'synthetic invalid host' } });
+  assert.equal(r.status, 200, JSON.stringify(r.data));
+  assert.equal(app.snapshot().events[0].orders.find((o) => o.id === 'first-buyer').status, 'paid');
+});
