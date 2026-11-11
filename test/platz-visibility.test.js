@@ -1,6 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const { testCtx } = require('../test-support/ctx.cjs');
 
 const mods = Object.fromEntries(['details', 'tournaments', 'announcements', 'schedule', 'info', 'people', 'seating', 'beamer', 'tickets', 'servers'].map((k) => [k, true]));
 const member = { id: '100000000000000001', name: 'Member' };
@@ -15,8 +16,8 @@ function setup(access) {
   const db = { meta: { securityVersion: 1, settings: { modules: mods } }, accounts: [],
     persons: [{ id: 'member', name: 'Member', discordId: member.id }, { id: 'other', name: 'Synthetic Other' }],
     events: [event], seating: { cols: 2, rows: 1, seats: [{ id: 'seat-a', label: 'A1' }, { id: 'seat-b', label: 'B7' }], categories: [], areas: [] } };
-  const ctx = { db, save() {}, broadcast() {}, str: (v, n = 100) => String(v || '').trim().slice(0, n),
-    settings: () => ({ modules: mods }), Discord: { enabled: false, md: String }, moduleOn: (k) => mods[k] };
+  const ctx = testCtx({ db, save() {}, broadcast() {}, str: (v, n = 100) => String(v || '').trim().slice(0, n),
+    settings: () => ({ modules: mods }), Discord: { enabled: false, md: String }, moduleOn: (k) => mods[k] });
   ctx.event = require('../lib/event')(ctx);
   ctx.participation = require('../lib/participation')({ db });
   ctx.people = require('../lib/people')(ctx);

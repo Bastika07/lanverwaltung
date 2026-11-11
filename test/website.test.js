@@ -1,15 +1,16 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const { testCtx } = require('../test-support/ctx.cjs');
 
 function fixture() {
   class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
   const db = { meta: {} }, events = [];
   let saves = 0;
-  const ctx = { db, HttpError, readBody: async (req) => req.pending ? req.pending : req.body,
+  const ctx = testCtx({ db, HttpError, readBody: async (req) => req.pending ? req.pending : req.body,
     requireAdmin: (req) => { if (!req.admin) throw new HttpError(401, 'Admin erforderlich'); },
     send: (res, status, body) => Object.assign(res, { status, body: structuredClone(body) }),
-    save: () => { saves++; }, broadcast: (type) => events.push(type) };
+    save: () => { saves++; }, broadcast: (type) => events.push(type) });
   const module = require('../lib/website')(ctx);
   async function request(method = 'GET', { admin = false, body, path = '', pending } = {}) {
     const req = { admin, body, pending }, res = {};

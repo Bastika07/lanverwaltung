@@ -6,6 +6,7 @@ const Participation = require('../lib/participation');
 const hasRights = (db, discordId, e) => Participation({ db }).hasRights(e, { discordId });
 const Binding = require('../lib/tournaments'); // Bindung von Turniereinträgen an Personen
 const { tournamentModule } = require('../test-support/tournaments.cjs');
+const { testCtx } = require('../test-support/ctx.cjs');
 
 const mods = Object.fromEntries(['details', 'tournaments', 'announcements', 'schedule', 'info', 'people', 'seating', 'beamer', 'tickets', 'servers'].map((k) => [k, true]));
 class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
@@ -17,9 +18,9 @@ function setup() {
     events: [{ id: 'e', name: 'Synthetic', start: null, end: null, active: false, modules: mods, access: {}, sale: {}, info: {},
       attendees: [], orders: [], ticketTypes: [{ id: 'normal', name: 'Normal', participant: true }], tournaments: [], guestServers: [] }],
     seating: { cols: 4, rows: 1, seats: [], categories: [], areas: [] } };
-  const ctx = { db, save() {}, broadcast() {}, HttpError, str: (v, n = 100) => String(v || '').trim().slice(0, n),
+  const ctx = testCtx({ db, save() {}, broadcast() {}, HttpError, str: (v, n = 100) => String(v || '').trim().slice(0, n),
     settings: () => ({ modules: mods }), Discord: { enabled: false, md: String }, moduleOn: (k) => mods[k],
-    requireAdmin() {}, readBody: async () => body, send: (res, status, data) => Object.assign(res, { status, data }) };
+    requireAdmin() {}, readBody: async () => body, send: (res, status, data) => Object.assign(res, { status, data }) });
   ctx.event = require('../lib/event')(ctx);
   ctx.people = require('../lib/people')(ctx);
   const { tournaments } = tournamentModule({ db, event: db.events[0] });

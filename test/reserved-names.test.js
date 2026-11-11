@@ -6,6 +6,7 @@ const http = require('node:http');
 const path = require('node:path');
 const vm = require('node:vm');
 const { tournamentModule } = require('../test-support/tournaments.cjs');
+const { testCtx } = require('../test-support/ctx.cjs');
 
 const RESERVED = ['__proto__', 'constructor', 'toString', 'hasOwnProperty'];
 const root = path.resolve(__dirname, '..');
@@ -78,8 +79,8 @@ function teamSetup() {
   const db = { meta: { securityVersion: 1, settings: { modules: mods } }, persons: [], accounts: [],
     events: [{ id: 'e', name: 'Synthetic', active: false, modules: mods, access: {}, sale: {}, info: {}, attendees: [], orders: [], ticketTypes: [], tournaments: [], guestServers: [] }],
     seating: { cols: 1, rows: 1, seats: [], categories: [], areas: [] } };
-  const ctx = { db, save() {}, broadcast() {}, HttpError, str: (v, n = 100) => String(v || '').trim().slice(0, n), settings: () => ({ modules: mods }),
-    Discord: { enabled: false, md: String }, moduleOn: (k) => mods[k], requireAdmin() {}, readBody: async () => ({}), send() {} };
+  const ctx = testCtx({ db, save() {}, broadcast() {}, HttpError, str: (v, n = 100) => String(v || '').trim().slice(0, n), settings: () => ({ modules: mods }),
+    Discord: { enabled: false, md: String }, moduleOn: (k) => mods[k], requireAdmin() {}, readBody: async () => ({}), send() {} });
   ctx.event = require('../lib/event')(ctx);
   ctx.people = require('../lib/people')(ctx);
   const { tournaments } = tournamentModule({ db, event: db.events[0] });

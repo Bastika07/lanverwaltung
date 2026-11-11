@@ -1,6 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const { testCtx } = require('../test-support/ctx.cjs');
 
 class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const mods = { schedule: true };
@@ -14,10 +15,10 @@ function setup() {
   const next = event('next', { start: new Date(Date.now() + 7 * 86400000).toISOString() });
   const posts = [];
   let body;
-  const ctx = { db: { meta: {}, persons: [], accounts: [], events: [current, next] }, save() {}, broadcast() {}, HttpError,
+  const ctx = testCtx({ db: { meta: {}, persons: [], accounts: [], events: [current, next] }, save() {}, broadcast() {}, HttpError,
     str: (v, n = 100) => String(v || '').trim().slice(0, n), settings: () => ({ remindMinutes: 10, modules: mods }), moduleOn: () => true,
     Discord: { md: String }, discordPost: (text) => posts.push(text), requireAdmin() {}, readBody: async () => body,
-    send: (res, status, data) => Object.assign(res, { status, data }) };
+    send: (res, status, data) => Object.assign(res, { status, data }) });
   ctx.event = require('../lib/event')(ctx);
   const schedule = require('../lib/schedule')(ctx);
   // Anfrage der Orga im Event e (wie server.js: ctx.event.run je Anfrage)
