@@ -16,6 +16,10 @@ Die Tabelle beschreibt den ursprünglichen Anwendungsstand `8bbe1a5`. Die Folgea
 
 Die beiden Passwort-Alerts betreffen keine gespeicherten Passwortverifier: Die Digests existieren ausschließlich lokal während `checkPassword` und werden unmittelbar an `timingSafeEqual` übergeben. Nach bestätigter unabhängiger Prüfung können diese beiden konkreten Alerts mit dieser Begründung als Fehlalarme quittiert werden. Es werden keine Scan-Regeln oder Pfade pauschal ausgeschlossen. Der tatsächliche aktuelle Alert-Status ist im GitHub-Code-Scanning-Bereich nachzulesen; ein grüner CodeQL-Workflow alleine zeigt nur eine erfolgreich abgeschlossene Analyse.
 
+**Logzeilen:** Nutzerwerte in Logzeilen laufen über `logText` aus `lib/security.js` (siehe [CODING_STANDARDS.md](../CODING_STANDARDS.md)). Für `js/log-injection` gilt nur das Entfernen von Zeilenumbrüchen (`.replace(/\n|\r/g, '')`) als Bereinigung; Ersetzen durch ein Leerzeichen oder eine Zeichenklasse erkennt CodeQL nicht.
+
+**Passwortvergleich:** `checkPassword` liegt seit der Umstellung in `lib/security.js`. Die Alerts #1 und #2 (`js/insufficient-password-hash`) beziehen sich auf die alte Stelle in `server.js`; an der neuen Stelle gilt dieselbe Einordnung als Fehlalarm.
+
 ## Nachprüfung zu Issues #5, #6 und #7
 
 - **Datenfluss der Passwortdigests:** `checkPassword` verwirft Nicht-Strings und deaktivierten Passwortzugang vor dem Hashen. Für String-Eingaben entstehen zwei lokale, neue 32-Byte-Buffer; nur `crypto.timingSafeEqual(a, b)` erhält sie. Zurückgegeben wird ausschließlich dessen Boolean, weder ein Digest noch ein Verifier. Die einzige Aufrufstelle im Loginzweig verwendet diesen Boolean. Weder dort noch in `checkPassword` gibt es eine Digest-Weitergabe an Speicherung, Sessions, Antworten oder Logs. Dies bedeutet fehlende Wiederverwendung/Persistenz, nicht garantierte sofortige Speicherlöschung durch den Garbage Collector.

@@ -2,19 +2,12 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
 const crypto = require('node:crypto');
 const { format } = require('node:util');
 const { isolated } = require('../test-support/isolated.cjs');
+const Security = require('../lib/security');
 const { discordSide } = require('../test-support/tournaments.cjs');
 
-const source = () => fs.readFileSync(path.resolve(__dirname, '../server.js'), 'utf8');
-function actualFunction(name) {
-  const match = source().match(new RegExp(`function ${name}\\([^\\n]*\\) \\{[\\s\\S]*?\\n\\}`));
-  assert.ok(match, `Actual server function ${name} must exist`);
-  return match[0];
-}
 
 test('Discord task errors keep format markers in tournament names literal', async (t) => {
   const error = console.error;
@@ -52,48 +45,49 @@ test('Discord task errors cannot forge log lines through tournament names', asyn
   assert.equal(logs[0], 'Discord (Cup{"sec":"admin_login"}x): Syntheticfailure');
 });
 
-test('Admin password comparison accepts only the configured string and remains timing-safe', () => {
+test('logText: Nutzerwerte ergeben genau eine Logzeile', () => {
+  assert.equal(Security.logText('Cup\n{"sec":"admin_login"}\r\u2028\u2029x'), 'Cup{"sec":"admin_login"}x');
+  assert.equal(Security.logText(42), '42');
+  assert.equal(Security.logText(undefined), 'undefined');
+});
+
+// Spione an node:crypto (lib/security.js ruft createHash/timingSafeEqual zur Laufzeit auf); nach jedem Test zurück.
+function spyCrypto(t, { createHash = crypto.createHash, onCompare = () => {} } = {}) {
+  const original = { createHash: crypto.createHash, timingSafeEqual: crypto.timingSafeEqual };
+  crypto.createHash = createHash;
+  crypto.timingSafeEqual = (a, b) => { onCompare(a, b); return original.timingSafeEqual(a, b); };
+  t.after(() => Object.assign(crypto, original));
+}
+
+test('Admin password comparison accepts only the configured string and remains timing-safe', (t) => {
   const password = 'Synthetic-only-admin-password';
   const comparisons = [];
-  const compare = vm.runInNewContext(`(${actualFunction('checkPassword')})`, {
-    ADMIN_PASSWORD: password,
-    crypto: { createHash: crypto.createHash, timingSafeEqual(a, b) {
-      comparisons.push([a.length, b.length]);
-      return crypto.timingSafeEqual(a, b);
-    } },
-  });
-  assert.equal(compare(password), true);
+  spyCrypto(t, { onCompare: (a, b) => comparisons.push([a.length, b.length]) });
+  assert.equal(Security.checkPassword(password, password), true);
   for (const input of ['', 'short', password + 'x', 'x'.repeat(4096), null, undefined, 0, {}, [], { toString: () => password }]) {
-    assert.equal(compare(input), false);
+    assert.equal(Security.checkPassword(input, password), false);
   }
   assert.deepEqual(comparisons, Array.from({ length: 5 }, () => [32, 32]));
 });
 
-test('Disabled admin password access rejects every input without hashing', () => {
+test('Disabled admin password access rejects every input without hashing', (t) => {
+  spyCrypto(t, { createHash() { assert.fail('Disabled login must not hash'); } });
   for (const configured of [undefined, '']) {
-    const compare = vm.runInNewContext(`(${actualFunction('checkPassword')})`, {
-      ADMIN_PASSWORD: configured, crypto: { createHash() { assert.fail('Disabled login must not hash'); } },
-    });
-    for (const input of ['', 'Synthetic-only', null, {}, undefined]) assert.equal(compare(input), false);
+    for (const input of ['', 'Synthetic-only', null, {}, undefined]) assert.equal(Security.checkPassword(input, configured), false);
   }
 });
 
-test('Password comparison digests are fresh local buffers, not logged, saved or returned', () => {
+test('Password comparison digests are fresh local buffers, not logged, saved or returned', (t) => {
   const password = 'Synthetic-only-admin-password', pairs = [];
   const noSideEffect = () => assert.fail('Password comparison must not log or persist data');
-  const context = vm.createContext({ ADMIN_PASSWORD: password,
-    console: { log: noSideEffect, error: noSideEffect, warn: noSideEffect },
-    fs: { writeFileSync: noSideEffect, appendFileSync: noSideEffect },
-    save: noSideEffect, storage: { save: noSideEffect },
-    crypto: { createHash: crypto.createHash, timingSafeEqual(a, b) {
-      pairs.push([a, b]);
-      return crypto.timingSafeEqual(a, b);
-    } },
-  });
-  const keys = Object.keys(context);
-  const compare = vm.runInContext(`(${actualFunction('checkPassword')})`, context);
-  assert.equal(compare(password), true);
-  assert.equal(compare('Synthetic-wrong-password'), false);
+  const saved = { log: console.log, error: console.error, warn: console.warn, writeFileSync: fs.writeFileSync, appendFileSync: fs.appendFileSync };
+  t.after(() => { Object.assign(console, { log: saved.log, error: saved.error, warn: saved.warn }); Object.assign(fs, { writeFileSync: saved.writeFileSync, appendFileSync: saved.appendFileSync }); });
+  Object.assign(console, { log: noSideEffect, error: noSideEffect, warn: noSideEffect });
+  Object.assign(fs, { writeFileSync: noSideEffect, appendFileSync: noSideEffect });
+  spyCrypto(t, { onCompare: (a, b) => pairs.push([a, b]) });
+  const globals = Object.keys(globalThis);
+  assert.equal(Security.checkPassword(password, password), true);
+  assert.equal(Security.checkPassword('Synthetic-wrong-password', password), false);
   assert.equal(pairs.length, 2);
   for (const pair of pairs) for (const digest of pair) {
     assert.ok(Buffer.isBuffer(digest));
@@ -101,7 +95,7 @@ test('Password comparison digests are fresh local buffers, not logged, saved or 
   }
   assert.notStrictEqual(pairs[0][0], pairs[1][0]);
   assert.notStrictEqual(pairs[0][1], pairs[1][1]);
-  assert.deepEqual(Object.keys(context), keys, 'No digest escapes into sandbox globals');
+  assert.deepEqual(Object.keys(globalThis), globals, 'No digest escapes into globals');
 });
 
 test('HTTP admin authentication retains CSRF, sessions, failure delay and ten-attempt IP limit', { timeout: 15000 }, async (t) => {
