@@ -32,11 +32,7 @@ if (!ADMIN_PASSWORD && process.env.ADMIN_PASSWORD_FILE) {
 }
 if (!ADMIN_PASSWORD && !DISCORD_ADMIN_POSSIBLE) {
   const pwFile = path.join(DATA_DIR, 'admin-password.txt');
-  if (fs.existsSync(pwFile)) ADMIN_PASSWORD = fs.readFileSync(pwFile, 'utf8').trim();
-  else {
-    ADMIN_PASSWORD = crypto.randomBytes(9).toString('base64url');
-    fs.writeFileSync(pwFile, ADMIN_PASSWORD + '\n', { mode: 0o600 });
-  }
+  ADMIN_PASSWORD = Security.readOrCreateSecret(pwFile, () => crypto.randomBytes(9).toString('base64url'));
   console.log(`Kein ADMIN_PASSWORD gesetzt – Notzugang steht in ${pwFile} (nicht im Log).`);
 }
 
