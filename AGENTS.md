@@ -55,3 +55,17 @@ Es gibt **kein** `npm install`/`npm ci` und keinen Lockfile. Nichts davon anlege
 - Conventional Commits, z. B. `feat: …`, `fix: …`, `ci: …`, `docs: …`. Beschreibung Deutsch oder Englisch.
 - PRs gegen `main`. Vor dem PR `npm run check` und `npm test` lokal grün haben.
 - Keine Secrets, `.env`-Dateien, Datenbanken oder Sicherungen committen.
+
+## Agent skills
+
+### Issue tracker
+
+Issues und Specs liegen als GitHub Issues in diesem Repo (`gh` CLI). Siehe `docs/agents/issue-tracker.md` (Deutsch: `docs/agents/issue-tracker.de.md`).
+
+### Triage labels
+
+Die fünf Standard-Labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. Siehe `docs/agents/triage-labels.md` (Deutsch: `docs/agents/triage-labels.de.md`).
+
+### Domain docs
+
+Single-context: ein `GLOSSARY.md` und `docs/adr/` im Repo-Root. Siehe `docs/agents/domain.md` (Deutsch: `docs/agents/domain.de.md`).

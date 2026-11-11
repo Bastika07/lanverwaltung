@@ -110,14 +110,14 @@ test('Coins und Teilnehmerlimit bei /anmelden und /team', () => {
   const prize2 = { id: 'b', name: 'Preis B', status: 'draft', signup: true, participants: [], playerIds: {}, members: {}, coins: 2 };
   const full = { id: 'c', name: 'Voll', status: 'draft', signup: true, participants: ['Synthetic X'], playerIds: {}, members: {}, maxParticipants: 1 };
   const list = [free, prize1, prize2, full];
-  const tournaments = {
+  const forEvent = {
     list: () => list, openForSignup: () => list,
     // wie server.js: Bindungen nur für Einträge, die es noch gibt
     setParticipants(t, n, bind = {}) { const ids = { ...t.playerIds, ...bind }; t.participants = n; t.playerIds = Object.fromEntries(n.map((x) => [x, ids[x] || null])); },
   };
   const commands = require('../lib/commands.js')({
     Discord: { md: String }, settings: () => ({ coinBudget: 3 }), moduleOn: () => true, mayViewDiscord: () => true,
-    tournaments, schedule: {}, announcements: {},
+    tournaments: { of: () => forEvent }, event: { current: () => ({}) }, schedule: {}, announcements: {},
     people: { byDiscord: (id) => persons[id], selfLink: () => null },
   });
   const run = (name, user, opts) => commands.find(name).run({ user: { id: user }, opts });

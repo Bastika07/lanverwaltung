@@ -7,6 +7,7 @@ const vm = require('node:vm');
 const crypto = require('node:crypto');
 const { format } = require('node:util');
 const { isolated } = require('../test-support/isolated.cjs');
+const { discordSide } = require('../test-support/tournaments.cjs');
 
 const source = () => fs.readFileSync(path.resolve(__dirname, '../server.js'), 'utf8');
 function actualFunction(name) {
@@ -15,25 +16,40 @@ function actualFunction(name) {
   return match[0];
 }
 
-test('Discord task errors keep format markers in tournament names literal', async () => {
+test('Discord task errors keep format markers in tournament names literal', async (t) => {
+  const error = console.error;
+  t.after(() => { console.error = error; });
   for (const marker of ['%s', '%d', '%j', '%%']) {
     const tournament = { id: 'synthetic', name: `Cup ${marker}` };
-    const logs = [], logArguments = [], broadcasts = [];
-    let saves = 0;
-    const context = { Discord: { enabled: true }, discordQueues: new Map(),
-      console: { error: (...args) => { logArguments.push(args); logs.push(format(...args)); } },
-      allTournaments: () => [tournament], save: () => { saves++; },
-      broadcast: (...args) => broadcasts.push(args) };
-    const task = vm.runInNewContext(`(${actualFunction('discordTask')})`, context);
+    const logs = [], logArguments = [];
+    console.error = (...args) => { logArguments.push(args); logs.push(format(...args)); };
     const message = `Synthetic Discord failure ${marker}`;
-    await task(tournament, async () => { throw new Error(message); });
+    const fail = async () => { throw new Error(message); };
+    const { side, saves, broadcasts } = discordSide({ event: { tournaments: [tournament] }, Discord: { enabled: true, sync: fail, remove: fail } });
+    await side.sync(tournament);
+    console.error = error;
     assert.deepEqual(logs, [`Discord (${tournament.name}): ${message}`]);
     assert.deepEqual(logArguments, [['Discord (%s): %s', tournament.name, message]]);
     assert.equal(tournament.discordStatus.state, 'error');
     assert.equal(tournament.discordStatus.error, message);
-    assert.equal(saves, 1);
+    assert.equal(saves.length, 1);
     assert.deepEqual(broadcasts, [['tournament', tournament.id]]);
   }
+});
+
+test('Discord task errors cannot forge log lines through tournament names', async (t) => {
+  const error = console.error;
+  t.after(() => { console.error = error; });
+  const logs = [];
+  console.error = (...args) => logs.push(format(...args));
+  const tournament = { id: 'synthetic', name: 'Cup\n{"sec":"admin_login"}\r\u2028x' };
+  const fail = async () => { throw new Error('Synthetic\nfailure'); };
+  const { side } = discordSide({ event: { tournaments: [tournament] }, Discord: { enabled: true, sync: fail, remove: fail } });
+  await side.sync(tournament);
+  console.error = error;
+  assert.equal(logs.length, 1);
+  assert.doesNotMatch(logs[0], /[\r\n\u2028\u2029]/);
+  assert.equal(logs[0], 'Discord (Cup{"sec":"admin_login"}x): Syntheticfailure');
 });
 
 test('Admin password comparison accepts only the configured string and remains timing-safe', () => {

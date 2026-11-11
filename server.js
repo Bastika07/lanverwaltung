@@ -12,7 +12,6 @@ const Dmx = require('./lib/dmx.js');
 const Security = require('./lib/security.js');
 const Access = require('./lib/access.js');
 const Storage = require('./lib/storage.js');
-const Tmt = require('./lib/tmt.js');
 
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -245,112 +244,10 @@ function findTournament(id) {
   return t;
 }
 
-function cleanParticipants(list) {
-  if (!Array.isArray(list)) throw new HttpError(400, 'Teilnehmerliste fehlt');
-  const names = list.map((s) => String(s).trim()).filter(Boolean);
-  if (names.length > 256) throw new HttpError(400, 'Maximal 256 Teilnehmer');
-  if (names.some((n) => n.length > 60)) throw new HttpError(400, 'Namen dürfen höchstens 60 Zeichen lang sein');
-  const seen = new Set();
-  for (const n of names) {
-    const k = n.toLowerCase();
-    if (seen.has(k)) throw new HttpError(400, `Teilnehmer doppelt: ${n}`);
-    seen.add(k);
-  }
-  return names;
-}
-
-function cleanType(v) { return ['ko', 'de', 'rr', 'groups'].includes(v) ? v : 'ko'; }
-const clampInt = (v, min, max, def) => { const n = Math.floor(Number(v)); return Number.isFinite(n) ? Math.min(Math.max(n, min), max) : def; };
-// Gruppenphase: Anzahl Gruppen und wie viele je Gruppe in die K.-o.-Runde kommen
-function cleanGroups(v) {
-  if (!v || typeof v !== 'object' || Array.isArray(v)) return { count: 4, advance: 2 };
-  return { count: clampInt(v.count, 2, 16, 4), advance: clampInt(v.advance, 1, 4, 2) };
-}
-// Preise je Platz (Platz 1 zuerst), nur Text
-function cleanPrizes(v) {
-  if (v == null) return [];
-  if (!Array.isArray(v)) throw new HttpError(400, 'Preise: Liste erwartet');
-  const list = v.slice(0, 16).map((x) => str(x, 100));
-  while (list.length && !list[list.length - 1]) list.pop();
-  return list;
-}
-// Startzeiten je Runde: { Rundenschlüssel: ISO-Zeit } (Schlüssel aus Bracket: r0, w1, l2, g0, gd0, kr0, p3, kp3, gf1, gf2)
-const ROUND_KEY = /^(?:(?:r|w|l|g|gd|kr)\d{1,2}|p3|kp3|gf1|gf2)$/;
-function cleanRoundTimes(v) {
-  if (v == null) return {};
-  if (typeof v !== 'object' || Array.isArray(v)) throw new HttpError(400, 'Rundenzeiten: Objekt erwartet');
-  const out = {};
-  for (const [k, iso] of Object.entries(v).slice(0, 80)) {
-    if (!ROUND_KEY.test(k) || !iso) continue;
-    const ms = Date.parse(String(iso));
-    if (!Number.isFinite(ms)) throw new HttpError(400, 'Rundenzeiten: ungültige Uhrzeit');
-    out[k] = new Date(ms).toISOString();
-  }
-  return out;
-}
-function cleanDate(v) {
-  if (!v) return null;
-  const ms = Date.parse(String(v));
-  if (!Number.isFinite(ms)) throw new HttpError(400, 'Ungültiges Datum');
-  return new Date(ms).toISOString();
-}
-// Turnierleiter: nur bestehende Personen (feste IDs)
-function cleanReferees(v) {
-  if (v == null) return [];
-  if (!Array.isArray(v)) throw new HttpError(400, 'Turnierleiter: Liste erwartet');
-  const ids = [...new Set(v.filter((id) => typeof id === 'string'))].slice(0, 20);
-  if (ids.some((id) => !db.persons.some((p) => p.id === id))) throw new HttpError(400, 'Turnierleiter: unbekannte Person');
-  return ids;
-}
-// Optionale Turnierfelder (Anlegen, Bearbeiten). Gibt nur übergebene Felder zurück; alles wird vor dem Ändern geprüft.
-function tournamentExtras(body) {
-  const out = {};
-  if (body.groups !== undefined) out.groups = cleanGroups(body.groups);
-  if (body.prizes !== undefined) out.prizes = cleanPrizes(body.prizes);
-  if (body.roundTimes !== undefined) out.roundTimes = cleanRoundTimes(body.roundTimes);
-  if (body.maxParticipants !== undefined) out.maxParticipants = clampInt(body.maxParticipants, 0, 256, 0);
-  if (body.signupUntil !== undefined) out.signupUntil = cleanDate(body.signupUntil);
-  if (body.seeds !== undefined) out.seeds = clampInt(body.seeds, 0, 256, 0);
-  if (body.coins !== undefined) out.coins = clampInt(body.coins, 0, 99, 0);
-  if (body.confirm !== undefined) out.confirm = !!body.confirm;
-  if (body.confirmMinutes !== undefined) out.confirmMinutes = clampInt(body.confirmMinutes, 1, 120, 10);
-  if (body.referees !== undefined) out.referees = cleanReferees(body.referees);
-  return out;
-}
-function cleanTeamSize(v) { const n = Math.floor(Number(v)); return n >= 1 && n <= 20 ? n : 1; }
-// CS2-Turnier mit TMT2 abgleichen (lib/tmt.js): null = aus, sonst Format für alle Spiele und für das Finale
-function cleanCs2(v) {
-  if (!v) return null;
-  if (typeof v !== 'object' || Array.isArray(v)) throw new HttpError(400, 'Ungültige CS2-Einstellung');
-  const ok = (f) => Object.hasOwn(Tmt.FORMATS, f);
-  if (!ok(v.format) || (v.finalFormat != null && v.finalFormat !== '' && !ok(v.finalFormat))) throw new HttpError(400, 'Unbekanntes CS2-Format');
-  return { format: v.format, finalFormat: ok(v.finalFormat) ? v.finalFormat : v.format };
-}
-
 function str(v, max = 100) {
   if (v !== null && typeof v === 'object') throw new HttpError(400, 'Textwert erwartet');
   return String(v || '').trim().slice(0, max);
 }
-
-// Ergebnisse entfernen, die nach einer Änderung nicht mehr zu den Paarungen passen.
-// Offene Meldungen und „läuft“ gelten nur für spielbereite Spiele mit unveränderter Paarung.
-function pruneStale(t) {
-  const view = Bracket.compute(t);
-  if (!view) return;
-  const valid = new Set(view.matches.filter((m) => m.status === 'done').map((m) => m.id));
-  for (const id of Object.keys(t.results)) if (!valid.has(id)) delete t.results[id];
-  const ready = new Map(view.matches.filter((m) => m.status === 'ready').map((m) => [m.id, m]));
-  for (const key of ['pending', 'playing']) {
-    if (!t[key]) continue;
-    for (const [id, x] of Object.entries(t[key])) {
-      const m = ready.get(id);
-      if (!m || x.pa !== m.a || x.pb !== m.b) delete t[key][id];
-    }
-  }
-}
-
-// Unentschieden nur bei „jeder gegen jeden“ und in Gruppenspielen
-const drawAllowed = (t, m) => t.type === 'rr' || (t.type === 'groups' && m.id.startsWith('G'));
 
 // ---------- Turnierleitung, Protokoll, Ergebnisse ----------
 // Wer handelt: Orga (Admin), Turnierleiter dieses Turniers oder ein Spieler (mit seiner Person)
@@ -363,98 +260,12 @@ function actor(req, t) {
   return { admin, referee, manage: admin || referee, account, name };
 }
 
-// Protokoll je Spiel (nur Orga und Turnierleitung sehen es), die letzten 300 Einträge
-function logMatch(t, m, text, by) {
-  t.log = (t.log || []).concat({ at: new Date().toISOString(), match: m ? m.id : null, label: m ? str(m.label, 80) : '', text: str(text, 200), by: str(by, 80) }).slice(-300);
-}
-
-// Für das Protokoll: Ergebnis bzw. wer kampflos gewinnt
-const scoreText = (t, m, r) => (r.wo ? `${t.participants[r.wo === 'a' ? m.b : m.a]} gewinnt kampflos` : `${r.a}:${r.b}`);
-
-// Ergebnis festschreiben (Meldung, Bestätigung, Orga, TMT2): Gewinner wandert weiter, abhängige Ergebnisse
-// verfallen, Discord sagt an. view: Ansicht vor der Änderung.
-function commitResult(t, view, m, r, by, text) {
-  const wasFinished = isFinished(t);
-  const correction = m.status === 'done';
-  t.results[m.id] = { ...r, pa: m.a, pb: m.b, at: new Date().toISOString() };
-  if (t.pending) delete t.pending[m.id];
-  if (t.playing) delete t.playing[m.id];
-  pruneStale(t);
-  logMatch(t, m, `${text} ${scoreText(t, m, r)}`, by);
-  discordAfterResult(t, wasFinished);
-  announceResult(t, view, m.id, correction);
-  save(); broadcast('tournament', t.id);
-}
-
-// Offene Meldungen ohne Einspruch gelten nach t.confirmMinutes automatisch
-function autoConfirm() {
-  for (const t of allTournaments()) {
-    if (t.status !== 'running' || !t.pending || !Object.keys(t.pending).length) continue;
-    const limit = (t.confirmMinutes || 10) * 60000;
-    for (const [id, p] of Object.entries(t.pending)) {
-      if (p.disputed || Date.now() - Date.parse(p.at) < limit) continue;
-      const view = Bracket.compute(t);
-      const m = view && view.matches.find((x) => x.id === id);
-      if (!m || m.status !== 'ready' || m.a !== p.pa || m.b !== p.pb) { delete t.pending[id]; continue; }
-      commitResult(t, view, m, { a: p.a, b: p.b }, 'System', 'Ohne Einspruch automatisch bestätigt:');
-    }
-  }
-}
-setInterval(autoConfirm, 20000).unref();
-setTimeout(autoConfirm, 1000).unref(); // auch gleich nach dem Start (Meldungen, die während eines Neustarts abgelaufen sind)
-
 // ---------- Coins ----------
 // Optional: Jede Person hat pro Event ein Budget (Einstellung coinBudget, 0 = aus); Turniere kosten t.coins.
 // Geprüft wird bei der Anmeldung über Discord (lib/commands.js).
 const coinBudget = () => Math.max(0, Math.floor(Number(settings().coinBudget) || 0));
 
-// ---------- Discord ----------
-// Aufgaben pro Turnier nacheinander im Hintergrund ausführen; Fehler blockieren das Turnier nicht.
-const discordQueues = new Map();
-
-function discordTask(t, fn) {
-  if (!Discord.enabled) return Promise.resolve();
-  t.discordStatus = { state: 'pending' };
-  const prev = discordQueues.get(t.id) || Promise.resolve();
-  const p = prev.then(async () => {
-    try {
-      await fn();
-      t.discordStatus = { state: 'ok', at: new Date().toISOString() };
-    } catch (err) {
-      console.error('Discord (%s): %s', t.name, err.message);
-      t.discordStatus = { state: 'error', error: err.message, at: new Date().toISOString() };
-    }
-    if (allTournaments().includes(t)) { save(); broadcast('tournament', t.id); }
-  });
-  discordQueues.set(t.id, p);
-  p.finally(() => { if (discordQueues.get(t.id) === p) discordQueues.delete(t.id); });
-  return p;
-}
-
-function isFinished(t) {
-  if (t.status !== 'running') return false;
-  const view = Bracket.compute(t);
-  return !!(view && view.finished);
-}
-
-// Turniere aller Events; Discord-Kanäle und -Ansagen gibt es nur für das laufende Event
-const allTournaments = () => (modules.event ? modules.event.all().flatMap((e) => e.tournaments) : []);
-const inActiveEvent = (t) => { const e = modules.event && modules.event.activeEvent(); return !!e && e.tournaments.includes(t); };
-
-// Kanäle gibt es nur während des Events und solange das Turnier nicht beendet ist.
-// Wird bei Ausführung ausgewertet, damit immer der aktuelle Stand zählt.
-const wantsChannels = (t) => t.discordEnabled !== false && !isFinished(t) && inActiveEvent(t);
-const discordSync = (t, renames) => discordTask(t, () =>
-  (wantsChannels(t) ? Discord.sync(t, renames) : Discord.remove(t)));
-
-// Nach Ergebnisänderungen: Kanäle löschen bzw. wiederherstellen, wenn sich "beendet" ändert.
-function discordAfterResult(t, wasFinished) {
-  if (t.discordEnabled === false) return;
-  if (wasFinished !== isFinished(t)) discordSync(t);
-}
-
 // ---------- Discord-Ansagen ----------
-const TYPE_NAMES = { ko: 'Single Elimination', de: 'Double Elimination', rr: 'Jeder gegen jeden', groups: 'Gruppenphase mit K.-o.-Runde' };
 const PUBLIC_URL = (process.env.PUBLIC_URL || '').replace(/\/+$/, '');
 // Eigene Adresse: PUBLIC_URL, sonst aus der Anfrage (Reverse Proxy: X-Forwarded-Proto/-Host)
 function baseUrl(req) {
@@ -495,170 +306,20 @@ function discordPost(text, onResult, kind = 'general', users = [], opts = {}) {
   });
 }
 
-function announce(t, lines) {
-  if (t.discordEnabled === false || !lines.length || !inActiveEvent(t)) return;
-  discordPost(lines.join('\n'), (error) => {
-    if ((t.announceError || null) === error) return;
-    t.announceError = error;
-    save();
-    if (allTournaments().includes(t)) broadcast('tournament', t.id);
-  }, 'tournaments', t.participants.flatMap((_, i) => playerIds(t, i))); // nur Spieler dieses Turniers anpingen
-}
+// ---------- Turniere ----------
+// Discord-Seite (Kanäle, Ansagen) und Turniermodul; die Routen unten ziehen in Schritt 3 ins Modul.
+const tournamentDiscord = require('./lib/tournament-discord.js')({ Discord, settings, moduleOn, people: () => modules.people,
+  events: () => modules.event, discordPost, save, broadcast, publicUrl: PUBLIC_URL });
+const tournaments = require('./lib/tournaments.js')({ db, save, broadcast, HttpError, str, notifier: tournamentDiscord, revision: () => revision });
+const { cleanParticipants, cleanType, cleanGroups, cleanTeamSize, cleanCs2, tournamentExtras, pruneStale, logMatch, commitResult,
+  applyMembers, chosenPlayers, summary } = tournaments;
+const cachedView = tournaments.view;
+const { isFinished, drawAllowed, clampInt } = require('./lib/tournaments.js');
 
-// Discord-IDs der Spieler eines Teilnehmers (Team-Mitglieder bzw. die gebundene Person, nie über den Namen)
-function playerIds(t, idx) {
-  if (!settings().mentionPlayers || !modules.people || !moduleOn('people')) return [];
-  const name = t.participants[idx];
-  const team = t.members && Object.hasOwn(t.members, name) ? t.members[name] : null;
-  const bound = t.playerIds && Object.hasOwn(t.playerIds, name) ? t.playerIds[name] : null;
-  const ids = team || (bound ? [bound] : []);
-  return ids.map((id) => modules.people.byId(id)).filter(Boolean).map((p) => p.discordId).filter(Boolean);
-}
-
-function pings(t, idx) {
-  const list = playerIds(t, idx).map((id) => `<@${id}>`);
-  return list.length ? ` (${list.join(' ')})` : '';
-}
-
-const who = (t, p) => Discord.md(t.participants[p]);
-const tLink = (t) => (PUBLIC_URL ? `<${PUBLIC_URL}/#/t/${t.id}>` : '');
-const pairLine = (t, m) => `${Discord.md(m.label)}: **${who(t, m.a)}**${pings(t, m.a)} vs **${who(t, m.b)}**${pings(t, m.b)}`;
-const matchLine = (t, m) => `⚔️ ${pairLine(t, m)}`;
-const matchKey = (m) => `${m.id}:${m.a}:${m.b}`;
-
-function resultLine(t, m) {
-  const a = who(t, m.a), b = who(t, m.b);
-  if (m.wo === 'both') return `${a} und ${b} sind disqualifiziert`;
-  if (m.wo) return `**${who(t, m.winner)}** gewinnt kampflos gegen ${who(t, m.loser)}${m.dq ? ' (disqualifiziert)' : ''}`;
-  return `${m.winner === m.a ? `**${a}**` : a} ${m.score.a} : ${m.score.b} ${m.winner === m.b ? `**${b}**` : b}`;
-}
-
-function podiumLines(t, view) {
-  const medals = { 1: '🥇', 2: '🥈', 3: '🥉' };
-  return view.placements.filter((p) => medals[p.place]).map((p) => `${medals[p.place]} ${who(t, p.p)}`);
-}
-
-function announceStart(t) {
-  const view = Bracket.compute(t);
-  const next = Bracket.playable(view);
-  announce(t, [
-    `🏁 **${Discord.md(t.name)}** startet! (${TYPE_NAMES[t.type]}, ${t.participants.length} Teilnehmer)`,
-    ...(next.length ? ['Jetzt spielen:', ...next.map((m) => matchLine(t, m))] : []),
-    tLink(t),
-  ].filter(Boolean));
-}
-
-// before: Ansicht vor der Änderung, matchId: das eingetragene/geänderte Spiel
-function announceResult(t, before, matchId, correction) {
-  const after = Bracket.compute(t);
-  const m = after.matches.find((x) => x.id === matchId);
-  if (!m || m.status !== 'done') return;
-  const lines = [`**${Discord.md(t.name)}** – ${correction ? '✏️ Korrektur' : '✅ Ergebnis'} ${Discord.md(m.label)}: ${resultLine(t, m)}`];
-  if (after.finished && (!before.finished || before.champion !== after.champion)) {
-    lines.push(`🏆 **${who(t, after.champion)}** gewinnt ${Discord.md(t.name)}!${before.finished ? ' (nach Korrektur)' : ''}`, ...podiumLines(t, after), tLink(t));
-  } else if (!after.finished) {
-    const seen = new Set(Bracket.playable(before).map(matchKey));
-    const next = Bracket.playable(after).filter((x) => !seen.has(matchKey(x)));
-    if (next.length) lines.push('Als Nächstes:', ...next.map((x) => matchLine(t, x)));
-  }
-  announce(t, lines.filter(Boolean));
-}
-
-// Team-Mitglieder an geänderte Teilnehmerliste anpassen (umbenannt -> mitnehmen, entfernt -> löschen)
-// Teamnamen sind Nutzerdaten (auch „__proto__“): nur eigene Schlüssel lesen, per fromEntries als eigene Felder anlegen.
-function applyMembers(t, names, renames = {}) {
-  if (!t.members) return;
-  t.members = Object.fromEntries(Object.entries(t.members)
-    .map(([team, ids]) => [Object.hasOwn(renames, team) ? renames[team] : team, ids])
-    .filter(([name]) => names.includes(name)));
-}
-
-// Personenauswahl der Orga im Turnierformular: { Eintragsname: Personen-ID | null }. Nur eigene Schlüssel,
-// nur Einträge dieses Turniers und nur Personen, die genau so heißen (keine veraltete oder abweichende Auswahl).
-function chosenPlayers(names, raw) {
-  if (raw === undefined) return {};
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new HttpError(400, 'Ungültige Personenauswahl');
-  return Object.fromEntries(Object.entries(raw).filter(([name]) => names.includes(name)).map(([name, id]) => {
-    if (id === null) return [name, null];
-    const p = typeof id === 'string' && db.persons.find((x) => x.id === id);
-    if (!p || p.name !== name) throw new HttpError(400, `Ausgewählte Person passt nicht zu „${name.slice(0, 60)}“`);
-    return [name, p.id];
-  }));
-}
-
-// Für Discord-Befehle (/anmelden, /team …)
-const tournamentApi = {
-  // Offene Anmeldung: Entwurf mit Anmeldung, vor dem Anmeldeschluss
-  openForSignup: () => db.tournaments.filter((t) => t.status === 'draft' && t.signup && !(t.signupUntil && Date.parse(t.signupUntil) <= Date.now())),
-  list: () => db.tournaments, // Turniere des Events (Coins, siehe lib/commands.js)
-  // Nur lesend (z. B. /jetzt): zwischengespeicherte Ansicht. isFinished bleibt frisch, weil Schreibpfade es vor save() aufrufen.
-  running: () => db.tournaments.filter((t) => t.status === 'running' && !(cachedView(t) || {}).finished),
-  view: (t) => cachedView(t),
-  changed(t) { save(); broadcast('tournament', t.id); },
-  setParticipants(t, names, bind = {}) {
-    const clean = cleanParticipants(names);
-    applyMembers(t, clean);
-    t.participants = clean;
-    // Selbstanmeldung: das Discord-Konto hat sich gerade selbst eingetragen – direkt an seine Person-ID binden.
-    t.playerIds = Object.fromEntries([...Object.entries(t.playerIds || {}), ...Object.entries(bind)]);
-    Access.bindPlayers(db, t);
-    if (t.discordEnabled !== false) discordSync(t);
-    save(); broadcast('tournament', t.id);
-  },
-  // CS2-Match ist in TMT2 angelegt (lib/tmt.js): Spieler anpingen, mit Server zum Verbinden. Nur solange die
-  // Paarung unverändert spielbereit ist.
-  announceServer(t, matchId, pa, pb, server) {
-    if (t.status !== 'running') return;
-    const m = Bracket.compute(t).matches.find((x) => x.id === matchId);
-    if (!m || m.status !== 'ready' || m.a !== pa || m.b !== pb) return;
-    // Server zugeteilt: das Spiel läuft
-    t.playing = t.playing || {};
-    if (!t.playing[m.id]) { t.playing[m.id] = { pa, pb, at: new Date().toISOString() }; logMatch(t, m, 'Läuft (TMT2-Server zugeteilt)', 'TMT2'); save(); broadcast('tournament', t.id); }
-    announce(t, [`🎮 **${Discord.md(t.name)}** – ${pairLine(t, m)}`, server ? `Server bereit: \`connect ${server}\`` : 'Server in TMT2 bereit']);
-  },
-  // Ergebnis aus TMT2 (lib/tmt.js): nur für ein offenes Spiel mit unveränderter Paarung, nie als Korrektur.
-  // maps: gespielte Maps mit Rundenstand ({ name, a, b }), wird zur Anzeige am Ergebnis gespeichert.
-  // Gibt null zurück oder einen Hinweis, warum nichts eingetragen wurde.
-  reportResult(t, matchId, a, b, pa, pb, maps) {
-    if (t.status !== 'running') return 'Turnier läuft nicht – Ergebnis bitte von Hand eintragen';
-    const view = Bracket.compute(t);
-    const m = view.matches.find((x) => x.id === matchId);
-    if (!m) return 'Spiel nicht mehr im Turnierbaum – Ergebnis bitte von Hand eintragen';
-    if (m.status === 'done') return m.score && m.score.a === a && m.score.b === b && m.a === pa && m.b === pb ? null : 'Im Turnier steht schon ein anderes Ergebnis';
-    if (m.status !== 'ready' || m.a !== pa || m.b !== pb) return 'Die Paarung hat sich geändert – Ergebnis bitte von Hand eintragen';
-    if (!Number.isInteger(a) || !Number.isInteger(b) || (!drawAllowed(t, m) && a === b)) return 'Kein eindeutiger Sieger – Ergebnis bitte von Hand eintragen';
-    const played = (Array.isArray(maps) ? maps : []).slice(0, 9).map((x) => ({ name: str(x.name, 60), a: x.a, b: x.b }))
-      .filter((x) => [x.a, x.b].every((n) => Number.isInteger(n) && n >= 0 && n <= 999));
-    commitResult(t, view, m, { a, b, ...(played.length ? { maps: played } : {}) }, 'TMT2', 'Ergebnis aus TMT2:');
-    return null;
-  },
-  // Event beginnt/endet: Voice-Kanäle aller Turniere anlegen bzw. entfernen
-  syncDiscord() {
-    for (const t of allTournaments()) if (wantsChannels(t) || t.discord) discordSync(t);
-  },
-};
-
-// Lesepfade berechnen den Spielplan nur nach Änderungen neu (Rundenturnier mit 256 Teilnehmern: 32.640 Spiele).
-// Die Ansicht wird zwischen Anfragen geteilt und darf nicht verändert werden; schreibende Pfade rechnen selbst.
-const viewCache = new WeakMap();
-function cachedView(t) {
-  const hit = viewCache.get(t);
-  if (hit && hit.revision === revision) return hit.view;
-  const view = Bracket.compute(t);
-  viewCache.set(t, { revision, view });
-  return view;
-}
-
-function summary(t) {
-  const view = t.status === 'running' ? cachedView(t) : null;
-  return {
-    id: t.id, name: t.name, game: t.game, type: t.type, status: t.status,
-    participants: t.participants.length, createdAt: t.createdAt,
-    teamSize: t.teamSize || 1, signup: !!t.signup, coins: t.coins || 0,
-    finished: !!(view && view.finished),
-    champion: view && view.champion != null ? t.participants[view.champion] : null,
-  };
-}
+// Offene Meldungen ohne Einspruch gelten nach t.confirmMinutes automatisch (alle Events)
+const autoConfirm = () => { for (const e of modules.event ? modules.event.all() : []) tournaments.of(e).autoConfirm(); };
+setInterval(autoConfirm, 20000).unref();
+setTimeout(autoConfirm, 1000).unref(); // auch gleich nach dem Start (Meldungen, die während eines Neustarts abgelaufen sind)
 
 // ---------- API ----------
 async function api(req, res, url) {
@@ -826,7 +487,7 @@ async function api(req, res, url) {
       };
       Access.bindPlayers(db, t, false, chosenPlayers(t.participants, body.playerIds));
       db.tournaments.unshift(t);
-      if (t.discordEnabled) discordSync(t);
+      tournamentDiscord.changed(t);
       save(); broadcast('tournament', t.id);
       return send(res, 201, t);
     }
@@ -894,14 +555,14 @@ async function api(req, res, url) {
         t.thirdPlace = !!body.thirdPlace;
         pruneStale(t);
       }
-      if (t.discordEnabled !== false || t.discord) discordSync(t, renames);
+      tournamentDiscord.changed(t, renames);
       save(); broadcast('tournament', t.id);
       return send(res, 200, t);
     }
     if (method === 'DELETE') {
       requireAdmin(req);
       db.tournaments = db.tournaments.filter((x) => x !== t);
-      if (t.discord) discordTask(t, () => Discord.remove(t));
+      tournamentDiscord.removed(t);
       save(); broadcast('tournament', t.id);
       return send(res, 200, { ok: true });
     }
@@ -929,7 +590,7 @@ async function api(req, res, url) {
     t.results = {}; t.pending = {}; t.playing = {}; t.disqualified = [];
     t.status = 'running';
     logMatch(t, null, body.shuffle ? `Gestartet (Auslosung${seeds ? `, ${seeds} gesetzt` : ''})` : 'Gestartet (Setzliste)', 'Orga');
-    announceStart(t);
+    tournamentDiscord.started(t);
     save(); broadcast('tournament', t.id);
     return send(res, 200, t);
   }
@@ -951,7 +612,7 @@ async function api(req, res, url) {
       createdAt: new Date().toISOString(),
     };
     db.tournaments.unshift(copy);
-    if (copy.discordEnabled) discordSync(copy);
+    tournamentDiscord.changed(copy);
     save(); broadcast('tournament', copy.id);
     return send(res, 201, copy);
   }
@@ -960,7 +621,7 @@ async function api(req, res, url) {
   if (parts[2] === 'discord' && method === 'POST') {
     requireAdmin(req);
     if (!Discord.enabled) throw new HttpError(400, 'Discord ist nicht konfiguriert');
-    await discordSync(t);
+    await tournamentDiscord.sync(t);
     return send(res, 200, t);
   }
 
@@ -972,7 +633,7 @@ async function api(req, res, url) {
     t.results = {}; t.pending = {}; t.playing = {}; t.disqualified = [];
     t.status = 'draft';
     logMatch(t, null, 'Zurück auf Entwurf', 'Orga');
-    discordAfterResult(t, wasFinished);
+    tournamentDiscord.reset(t, wasFinished);
     save(); broadcast('tournament', t.id);
     return send(res, 200, t);
   }
@@ -993,16 +654,7 @@ async function api(req, res, url) {
     t.disqualified = [...set].sort((x, y) => x - y);
     pruneStale(t);
     logMatch(t, null, `${t.participants[idx]} ${body.on === false ? 'nicht mehr disqualifiziert' : 'disqualifiziert'}`, me.name);
-    discordAfterResult(t, wasFinished);
-    const after = Bracket.compute(t);
-    const lines = [`**${Discord.md(t.name)}** – ${body.on === false ? '↩️ Disqualifikation aufgehoben' : '🟥 Disqualifiziert'}: **${who(t, idx)}**`];
-    if (after.finished && !before.finished && after.champion !== undefined) lines.push(`🏆 **${who(t, after.champion)}** gewinnt ${Discord.md(t.name)}!`, ...podiumLines(t, after));
-    else if (!after.finished) {
-      const seen = new Set(Bracket.playable(before).map(matchKey));
-      const next = Bracket.playable(after).filter((x) => !seen.has(matchKey(x)));
-      if (next.length) lines.push('Als Nächstes:', ...next.map((x) => matchLine(t, x)));
-    }
-    announce(t, lines);
+    tournamentDiscord.disqualified(t, { index: idx, on: body.on !== false, before, wasFinished });
     save(); broadcast('tournament', t.id);
     return send(res, 200, tournamentView());
   }
@@ -1030,7 +682,7 @@ async function api(req, res, url) {
     t.playerIds = {};
     Access.bindPlayers(db, t);
     logMatch(t, null, `${count} Teams à bis zu ${size} ausgelost${body.balanced ? ' (nach Setzliste)' : ''}`, 'Orga');
-    if (t.discordEnabled !== false) discordSync(t);
+    tournamentDiscord.changed(t);
     save(); broadcast('tournament', t.id);
     return send(res, 200, t);
   }
@@ -1060,8 +712,7 @@ async function api(req, res, url) {
       delete t.results[m.id];
       pruneStale(t);
       logMatch(t, m, 'Ergebnis gelöscht', me.name);
-      discordAfterResult(t, wasFinished);
-      announce(t, [`**${Discord.md(t.name)}** – ↩️ Ergebnis zurückgenommen: ${Discord.md(m.label)}: ${who(t, m.a)} vs ${who(t, m.b)}`]);
+      tournamentDiscord.resultCleared(t, m, wasFinished);
       save(); broadcast('tournament', t.id);
       return send(res, 200, me.admin ? t : tournamentView());
     }
@@ -1096,7 +747,7 @@ async function api(req, res, url) {
       }
       pend.disputed = true;
       logMatch(t, m, `Meldung ${pend.a}:${pend.b} bestritten`, me.name);
-      announce(t, [`**${Discord.md(t.name)}** – ⚠️ Ergebnis bestritten: ${Discord.md(m.label)}: ${who(t, m.a)} vs ${who(t, m.b)} – die Turnierleitung entscheidet.`]);
+      tournamentDiscord.resultDisputed(t, m, pend);
       save(); broadcast('tournament', t.id);
       return send(res, 200, tournamentView());
     }
@@ -1124,7 +775,7 @@ async function api(req, res, url) {
       pend.disputed = true;
       pend.counter = { a, b };
       logMatch(t, m, `Abweichende Meldung ${a}:${b} (vorher ${pend.a}:${pend.b})`, me.name);
-      announce(t, [`**${Discord.md(t.name)}** – ⚠️ Ergebnis strittig: ${Discord.md(m.label)}: ${who(t, m.a)} vs ${who(t, m.b)} (${pend.a}:${pend.b} oder ${a}:${b}) – die Turnierleitung entscheidet.`]);
+      tournamentDiscord.resultDisputed(t, m, pend, { a, b });
       save(); broadcast('tournament', t.id);
       return send(res, 200, tournamentView());
     }
@@ -1133,7 +784,7 @@ async function api(req, res, url) {
     t.pending[m.id] = { a, b, pa: m.a, pb: m.b, by: side, at: new Date().toISOString() };
     logMatch(t, m, `Gemeldet ${a}:${b}, wartet auf Bestätigung`, me.name);
     const other = side === 'a' ? m.b : m.a;
-    announce(t, [`**${Discord.md(t.name)}** – 📝 ${Discord.md(m.label)}: ${who(t, m.a)} ${a} : ${b} ${who(t, m.b)} gemeldet. **${who(t, other)}**${pings(t, other)} bitte bestätigen (sonst gilt es in ${t.confirmMinutes || 10} Minuten).`]);
+    tournamentDiscord.resultPending(t, m, { a, b, other });
     save(); broadcast('tournament', t.id);
     return send(res, 200, tournamentView());
   }
@@ -1212,7 +863,7 @@ const ctx = {
   refreshCommands: () => refreshCommands(), eventModuleOn: (e, key) => moduleOnIn(eventModules(e), key),
   // Discord-Befehle: darf dieses Discord-Konto das Modul im aktuellen Event sehen?
   mayViewDiscord: (discordId, key) => { const e = modules.event.current(); return accessOf(e, key) === 'public' || isMemberId(discordId, e); },
-  tournaments: tournamentApi,
+  tournaments, tournamentDiscord,
 };
 ctx.event = modules.event = require('./lib/event.js')(ctx);
 ctx.announcements = modules.announcements = require('./lib/announcements.js')(ctx);
@@ -1240,7 +891,7 @@ save(); // normalisierte Startwerte einmal vollständig persistieren
 gateway.start();
 
 // Beim Start: Kanäle beendeter Turniere bzw. außerhalb des Events entfernen
-for (const t of allTournaments()) if (t.discord && !wantsChannels(t)) discordSync(t);
+tournamentDiscord.cleanup();
 
 server.listen(PORT, HOST, () => {
   console.log(`LAN-System läuft auf http://${HOST}:${PORT}`);
