@@ -1,16 +1,12 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
-const Access = require('../lib/access');
 
 const mods = Object.fromEntries(['details', 'tournaments', 'announcements', 'schedule', 'info', 'people', 'seating', 'beamer', 'tickets', 'servers'].map((k) => [k, true]));
 const member = { id: '100000000000000001', name: 'Member' };
 const stranger = { id: '100000000000000009', name: 'Stranger' };
 
-// Echte Module people/commands; Sichtbarkeitsregel (accessOf, mayViewDiscord) unverändert aus server.js.
+// Echte Module people/commands/participation: dieselbe Sichtbarkeitsregel wie auf der Webseite.
 function setup(access) {
   const event = { id: 'e', name: 'Synthetic', active: true, modules: mods, access, sale: {}, info: {},
     ticketTypes: [{ id: 'normal', name: 'Normal', participant: true }], tournaments: [], guestServers: [],
@@ -22,14 +18,9 @@ function setup(access) {
   const ctx = { db, save() {}, broadcast() {}, str: (v, n = 100) => String(v || '').trim().slice(0, n),
     settings: () => ({ modules: mods }), Discord: { enabled: false, md: String }, moduleOn: (k) => mods[k] };
   ctx.event = require('../lib/event')(ctx);
+  ctx.participation = require('../lib/participation')({ db });
   ctx.people = require('../lib/people')(ctx);
-  const server = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
-  const accessOf = server.match(/^const accessOf = [^\n]+$/m);
-  const mayView = server.match(/^ {2}mayViewDiscord: ([^\n]+),$/m);
-  assert.ok(accessOf && mayView, 'server.js visibility rule must exist');
-  const mayViewDiscord = vm.runInNewContext(`${accessOf[0]}\n(${mayView[1]})`, {
-    modules: { event: { current: () => event } }, isMemberId: (id, e) => Access.isMember(db, id, e) });
-  const commands = require('../lib/commands')({ ...ctx, tournaments: {}, announcements: {}, schedule: {}, mayViewDiscord });
+  const commands = require('../lib/commands')({ ...ctx, tournaments: {}, announcements: {}, schedule: {} });
   const platz = commands.find('platz');
   return {
     run: (user, name) => { try { return platz.run({ user, opts: name ? { name } : {} }); } catch (e) { return `Fehler: ${e.message}`; } },

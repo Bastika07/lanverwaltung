@@ -111,7 +111,7 @@ test('/announce: Option „vorlesen“ wird durchgereicht, ohne Angabe gilt die 
   const commands = require('../lib/commands.js')({
     Discord: {}, settings: () => ({ announceRole: '' }), people: {}, schedule: {}, tournaments: {},
     announcements: { create: (o) => { created.push(o); return { at: new Date().toISOString(), until: null }; } },
-    moduleOn: () => true, mayViewDiscord: () => true,
+    moduleOn: () => true, participation: { mayView: () => true }, event: { current: () => null },
   });
   const def = commands.commands().find((d) => d.name === 'announce');
   assert.deepEqual(def.options.map((o) => [o.name, o.type, !!o.required]), [['nachricht', 3, true], ['vorlesen', 5, false]]);

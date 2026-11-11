@@ -1,7 +1,9 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const Access = require('../lib/access');
+const Participation = require('../lib/participation');
+// Teilnehmerrechte eines Discord-Kontos im Event
+const hasRights = (db, discordId, e) => Participation({ db }).hasRights(e, { discordId });
 const Binding = require('../lib/tournaments'); // Bindung von Turniereinträgen an Personen
 const { tournamentModule } = require('../test-support/tournaments.cjs');
 
@@ -21,7 +23,7 @@ function setup() {
   ctx.event = require('../lib/event')(ctx);
   ctx.people = require('../lib/people')(ctx);
   const { tournaments } = tournamentModule({ db, event: db.events[0] });
-  const commands = require('../lib/commands')({ ...ctx, tournaments, announcements: {}, schedule: {}, mayViewDiscord: () => true });
+  const commands = require('../lib/commands')({ ...ctx, tournaments, announcements: {}, schedule: {}, participation: { mayView: () => true } });
   const t = { id: 'cup', name: 'Cup', type: 'ko', status: 'draft', signup: true, teamSize: 1, participants: [], members: {}, playerIds: {}, order: [], results: {} };
   db.tournaments.push(t);
   const run = (name, user, opts) => commands.find(name).run({ user, opts });
@@ -78,7 +80,7 @@ test('binding: self-claimed names never gain result rights; a deliberate organiz
   const bulk = await call('POST', ['people'], { names: ['Alice', 'Carol'] });
   assert.equal(bulk.status, 201);
   assert.deepEqual(bulk.data.map((p) => [p.name, p.approved, p.selfClaimed === true]), [['Alice', false, true], ['Carol', true, false]]);
-  assert.equal(Access.isMember(db, attacker.id, event), false);
+  assert.equal(hasRights(db, attacker.id, event), false);
   Binding.bindPlayers(db, t, true);
   assert.equal(t.playerIds.Alice, null);
   assert.equal(t.playerIds.Carol, null, 'a matching name alone never binds');
@@ -90,7 +92,7 @@ test('binding: self-claimed names never gain result rights; a deliberate organiz
   const approve = await call('PUT', ['people', alice.id], { approved: true });
   assert.equal(approve.status, 200);
   assert.equal(alice.selfClaimed, undefined);
-  assert.equal(Access.isMember(db, attacker.id, event), true);
+  assert.equal(hasRights(db, attacker.id, event), true);
   Binding.bindPlayers(db, t, true);
   assert.equal(t.playerIds.Alice, null, 'approval alone does not bind a tournament slot');
   Binding.bindPlayers(db, t, true, { Alice: alice.id });

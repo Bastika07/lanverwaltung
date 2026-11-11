@@ -1,7 +1,9 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const Access = require('../lib/access');
+const Participation = require('../lib/participation');
+// Teilnehmerrechte eines Discord-Kontos im Event
+const hasRights = (db, discordId, e) => Participation({ db }).hasRights(e, { discordId });
 const { isolated } = require('../test-support/isolated.cjs');
 
 // buyer hat nur ein bezahltes Zuschauerticket, other ein normales Teilnehmerticket,
@@ -41,14 +43,14 @@ test('participant rights: membership follows the paid ticket type for buyers and
   const event = { attendees: [], ticketTypes: [{ id: 'normal' }, { id: 'spectator', participant: false }, { id: 'legacy', participant: true }],
     orders: [{ status: 'paid', accountId: 'buyer', tickets: [ticket('spectator', 'pb')] }] };
   const db = { persons: [{ id: 'pb', discordId: 'holder' }] };
-  assert.equal(Access.isMember(db, 'buyer', event), false);
-  assert.equal(Access.isMember(db, 'holder', event), false);
+  assert.equal(hasRights(db, 'buyer', event), false);
+  assert.equal(hasRights(db, 'holder', event), false);
   event.orders[0].tickets.push(ticket('normal', 'pb'));
-  assert.equal(Access.isMember(db, 'buyer', event), true);
-  assert.equal(Access.isMember(db, 'holder', event), true);
+  assert.equal(hasRights(db, 'buyer', event), true);
+  assert.equal(hasRights(db, 'holder', event), true);
   event.orders[0].tickets = [ticket('deleted-type', 'pb')];
-  assert.equal(Access.isMember(db, 'buyer', event), false, 'unknown ticket types fail closed');
+  assert.equal(hasRights(db, 'buyer', event), false, 'unknown ticket types fail closed');
   event.orders[0].status = 'cancelled';
   event.orders[0].tickets = [ticket('legacy', 'pb')];
-  assert.equal(Access.isMember(db, 'holder', event), false);
+  assert.equal(hasRights(db, 'holder', event), false);
 });

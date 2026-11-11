@@ -14,7 +14,7 @@ function setup(t) {
   Bracket.compute = (x) => { calls++; return compute(x); };
   t.after(() => { Bracket.compute = compute; });
   const mods = { tournaments: true };
-  const commands = require('../lib/commands')({ Discord: { md: String }, settings: () => ({}), moduleOn: (k) => mods[k], mayViewDiscord: () => true,
+  const commands = require('../lib/commands')({ Discord: { md: String }, settings: () => ({}), moduleOn: (k) => mods[k], participation: { mayView: () => true },
     tournaments: mod.tournaments, event: { current: () => mod.event }, people: {}, announcements: {}, schedule: {} });
   const jetzt = () => commands.find('jetzt').run({ user: { id: '100000000000000001' }, opts: {} });
   return { tour, mod, compute, jetzt, calls: () => calls };

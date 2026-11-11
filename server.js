@@ -9,7 +9,6 @@ const crypto = require('crypto');
 const Discord = require('./lib/discord.js');
 const Dmx = require('./lib/dmx.js');
 const Security = require('./lib/security.js');
-const Access = require('./lib/access.js');
 const Storage = require('./lib/storage.js');
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -96,19 +95,15 @@ function ticketEvent() {
   const next = modules.event.all().filter((e) => !modules.event.isOver(e) && moduleOnIn(eventModules(e), 'tickets'));
   return next.sort((a, b) => (a.start ? Date.parse(a.start) : Infinity) - (b.start ? Date.parse(b.start) : Infinity))[0] || null;
 }
-// ---------- Sichtbarkeit: öffentlich oder nur für Teilnehmer mit Ticket (pro Event und Modul) ----------
-// Teilnehmer = gültiges Ticket oder ausdrücklich von der Orga bestätigte Teilnahme.
+// ---------- Sichtbarkeit: öffentlich oder nur für Teilnehmer mit Ticket (pro Event und Modul, lib/participation.js) ----------
 const RESTRICTABLE = ['details', 'tournaments', 'schedule', 'info', 'people', 'seating', 'beamer', 'servers', 'catering'];
-const accessOf = (e, key) => ((e && e.access) || {})[key] === 'tickets' ? 'tickets' : 'public';
-function isMemberId(discordId, e) {
-  return Access.isMember(db, discordId, e);
-}
-const isMember = (req, e) => { const a = modules.accounts && modules.accounts.current(req); return !!a && isMemberId(a.id, e); };
-const mayView = (req, key, e = modules.event.scoped()) => accessOf(e, key) === 'public' || isAdmin(req) || isMember(req, e);
+const participation = require('./lib/participation.js')({ db });
+// Wer stellt die Anfrage: Orga und/oder angemeldetes Discord-Konto
+const actorOf = (req) => { const a = modules.accounts && modules.accounts.current(req); return { admin: isAdmin(req), discordId: a ? a.id : null }; };
 // Besucher-Login mit Discord: für Tickets, Gastserver oder um eingeschränkte Module zu sehen
 const userLoginNeeded = () => ticketsAnywhere() || moduleOnIn(eventModules(modules.event.current()), 'tournaments') || moduleOnIn(eventModules(modules.event.current()), 'servers')
   || moduleOnIn(eventModules(modules.event.current()), 'catering')
-  || RESTRICTABLE.some((k) => accessOf(modules.event.current(), k) === 'tickets');
+  || RESTRICTABLE.some((k) => participation.visibility(modules.event.current(), k) === 'tickets');
 // API-Pfade, deren Daten zu einem einschränkbaren Modul gehören (Sitzplan steckt in /people)
 const PATH_MODULE = { details: 'details', tournaments: 'tournaments', schedule: 'schedule', info: 'info', people: 'people', servers: 'servers', catering: 'catering' };
 
@@ -335,8 +330,8 @@ async function api(req, res, url) {
     return send(res, 200, {
       admin: isAdmin(req), discord: Discord.enabled, settings: publicSettings(),
       // Sichtbarkeit im aktuellen Event und ob dieser Besucher Teilnehmer mit Ticket ist
-      access: Object.fromEntries(RESTRICTABLE.map((k) => [k, accessOf(modules.event.current(), k)])),
-      member: isMember(req, modules.event.current()),
+      access: Object.fromEntries(RESTRICTABLE.map((k) => [k, participation.visibility(modules.event.current(), k)])),
+      member: participation.hasRights(modules.event.current(), actorOf(req)),
       userLogin: userLoginNeeded() && modules.accounts.enabled(), // „Mit Discord anmelden“ für Besucher möglich
       adminLogin: { discord: DISCORD_ADMIN_POSSIBLE, password: !!ADMIN_PASSWORD }, // welche Anmeldewege es gibt
     });
@@ -400,7 +395,7 @@ async function api(req, res, url) {
   const admin = isAdmin(req);
   // Nur für Teilnehmer mit Ticket? Dann auch die Daten nur für sie (auch Ergebnis-Eintragen usw.)
   const gated = PATH_MODULE[parts[0]];
-  if (!admin && gated && moduleOn(gated) && !mayView(req, gated)) {
+  if (!admin && gated && moduleOn(gated) && !participation.mayView(actorOf(req), gated, modules.event.scoped())) {
     throw new HttpError(403, 'Nur für Teilnehmer mit Ticket – bitte unter „Tickets“ mit Discord anmelden');
   }
   for (const [key, m] of Object.entries(modules)) {
@@ -499,10 +494,8 @@ const ctx = {
   db, save, broadcast, send, readBody, requireAdmin, isAdmin, HttpError, str, settings, moduleOn, Discord, discordPost, discordQueue,
   parseCookies, baseUrl, security: Security, startAdminSession, ticketsAnywhere, userLoginNeeded: () => userLoginNeeded(),
   revokeAdminSessions: (discordId) => { for (const [token, session] of sessions) if (session.discordId === discordId) sessions.delete(token); },
-  isMember: (req, e) => isMember(req, e), mayView, isMemberId,
+  participation, actorOf,
   refreshCommands: () => refreshCommands(), eventModuleOn: (e, key) => moduleOnIn(eventModules(e), key),
-  // Discord-Befehle: darf dieses Discord-Konto das Modul im aktuellen Event sehen?
-  mayViewDiscord: (discordId, key) => { const e = modules.event.current(); return accessOf(e, key) === 'public' || isMemberId(discordId, e); },
   tournaments, tournamentDiscord,
 };
 ctx.event = modules.event = require('./lib/event.js')(ctx);

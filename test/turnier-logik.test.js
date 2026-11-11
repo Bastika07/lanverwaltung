@@ -114,7 +114,7 @@ test('Coins und Teilnehmerlimit bei /anmelden und /team', () => {
   // Echtes Turniermodul (Coins, Teilnehmerlimit, Bindung), ohne Discord und ohne Speicher
   const { tournaments } = tournamentModule({ db: { persons: Object.values(persons) }, event, coinBudget: () => 3 });
   const commands = require('../lib/commands.js')({
-    Discord: { md: String }, settings: () => ({ coinBudget: 3 }), moduleOn: () => true, mayViewDiscord: () => true,
+    Discord: { md: String }, settings: () => ({ coinBudget: 3 }), moduleOn: () => true, participation: { mayView: () => true },
     tournaments, event: { current: () => event }, schedule: {}, announcements: {},
     people: { byDiscord: (id) => persons[id], selfLink: () => null },
   });

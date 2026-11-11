@@ -83,7 +83,7 @@ function teamSetup() {
   ctx.event = require('../lib/event')(ctx);
   ctx.people = require('../lib/people')(ctx);
   const { tournaments } = tournamentModule({ db, event: db.events[0] });
-  const commands = require('../lib/commands')({ ...ctx, tournaments, announcements: {}, schedule: {}, mayViewDiscord: () => true });
+  const commands = require('../lib/commands')({ ...ctx, tournaments, announcements: {}, schedule: {}, participation: { mayView: () => true } });
   const t = { id: 'teams', name: 'Teams', type: 'ko', status: 'draft', signup: true, teamSize: 2, participants: [], members: {}, order: [], results: {} };
   db.tournaments.push(t);
   return { t, tournaments, event: db.events[0], team: (sub, user, opts) => commands.find('team').run({ sub, user, opts: { turnier: 'teams', ...opts } }) };
