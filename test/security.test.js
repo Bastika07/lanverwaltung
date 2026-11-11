@@ -13,6 +13,7 @@ const Participation = require('../lib/participation');
 const hasRights = (db, discordId, e) => Participation({ db }).hasRights(e, { discordId });
 const Binding = require('../lib/tournaments'); // Bindung von Turniereinträgen an Personen
 const { readSnapshot } = require('../lib/storage');
+const { testCtx } = require('../test-support/ctx.cjs');
 const root = path.resolve(__dirname, '..');
 const stamp = new Date().toISOString();
 const mods = Object.fromEntries(['details', 'tournaments', 'announcements', 'schedule', 'info', 'people', 'seating', 'beamer', 'tickets', 'servers'].map((k) => [k, true]));
@@ -33,7 +34,7 @@ function fixture() {
 }
 function context(db) {
   class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
-  const ctx = { db, save() {}, broadcast() {}, HttpError, str: (v, n = 100) => String(v || '').trim().slice(0, n), settings: () => ({ modules: mods }), Discord: { enabled: false, md: String }, moduleOn: (k) => mods[k] };
+  const ctx = testCtx({ db, save() {}, broadcast() {}, HttpError, str: (v, n = 100) => String(v || '').trim().slice(0, n), settings: () => ({ modules: mods }), Discord: { enabled: false, md: String }, moduleOn: (k) => mods[k] });
   ctx.event = require('../lib/event')(ctx);
   ctx.people = require('../lib/people')(ctx);
   return ctx;

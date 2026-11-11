@@ -18,7 +18,7 @@ Selbstgehostetes LAN-Party-System: Turniere, Durchsagen, Programm, Infos, Teilne
 | [server.js](server.js) | HTTP-Server, Routing, Admin-Zugang, Sicherheits-Header |
 | [lib/](lib/) | Serverseitige Domänenmodule (Turniere, Teilnahme, Tickets, Personen, Sitzplan, Catering, Discord, DMX, Sicherheit, Storage …) |
 | [public/](public/) | Browser-Code und Styles; [public/bracket.js](public/bracket.js) wird auch serverseitig genutzt |
-| [test/](test/) | Tests mit `node:test`; Hilfen in [test-support/](test-support/): `isolated.cjs` (echter Server mit synthetischen Daten), `tournaments.cjs` (Turniermodul ohne Server) |
+| [test/](test/) | Tests mit `node:test`; Hilfen in [test-support/](test-support/): `isolated.cjs` (echter Server mit synthetischen Daten), `tournaments.cjs` (Turniermodul ohne Server), `ctx.cjs` (Modul-Kontext ohne Server) |
 | [ops/](ops/) | Codeprüfung, Testaufteilung, Sicherheits-Assessment, Image-Scan |
 | [docs/](docs/) | Feature- und Betriebsdoku (Deutsch) |
 | [.github/workflows/](.github/workflows/) | CI: Code checks, CodeQL, Unit-, npm- und Integrationstests, Container-Scan |

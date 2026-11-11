@@ -125,3 +125,12 @@ test('CI: kein Test führt Quelltext-Auszüge aus server.js aus', () => {
   });
   assert.deepEqual(offenders, []);
 });
+
+test('Test-Kontext: fehlende ctx-Einträge brechen mit Namen ab, optionale Nachbarn gelten als nicht vorhanden', () => {
+  const { testCtx } = require('../test-support/ctx.cjs');
+  const ctx = testCtx({ db: { persons: [] } });
+  assert.throws(() => ctx.servers.onAccountDeleted(), /ctx\.servers fehlt im Test-Kontext/);
+  assert.equal(ctx.catering, undefined);
+  ctx.event = { current: () => null };
+  assert.equal(ctx.event.current(), null, 'modules can be wired later');
+});
