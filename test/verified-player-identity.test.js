@@ -2,6 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const Access = require('../lib/access');
+const Binding = require('../lib/tournaments'); // Bindung von Turniereinträgen an Personen
 const { tournamentModule } = require('../test-support/tournaments.cjs');
 
 const mods = Object.fromEntries(['details', 'tournaments', 'announcements', 'schedule', 'info', 'people', 'seating', 'beamer', 'tickets', 'servers'].map((k) => [k, true]));
@@ -38,7 +39,7 @@ const bob = { id: '100000000000000002', name: 'Bob' };
 test('/abmelden: a self-claimed equal name cannot remove an organizer entry', () => {
   const { t, run, db } = setup();
   t.participants = ['Alice'];
-  Access.bindPlayers(db, t);
+  Binding.bindPlayers(db, t);
   assert.equal(t.playerIds.Alice, null, 'organizer typed a name without a person');
   run('ich', attacker, { name: 'Alice' });
   const claimed = db.persons.find((p) => p.discordId === attacker.id);
@@ -66,23 +67,23 @@ test('/abmelden: own self-signups can still leave while signup is open, not afte
 test('binding: self-claimed names never gain result rights; a deliberate organizer approval does', async () => {
   const { db, t, run, call, event } = setup();
   t.participants = ['Alice', 'Carol'];
-  Access.bindPlayers(db, t);
+  Binding.bindPlayers(db, t);
   run('ich', attacker, { name: 'Alice' });
   const alice = db.persons.find((p) => p.discordId === attacker.id);
-  Access.bindPlayers(db, t, true); // z. B. Turnier erneut gespeichert oder gestartet
+  Binding.bindPlayers(db, t, true); // z. B. Turnier erneut gespeichert oder gestartet
   assert.equal(t.playerIds.Alice, null);
-  assert.equal(Access.mayReport(db, attacker.id, t, { a: 0, b: 1 }), false);
+  assert.equal(Binding.mayReport(db, attacker.id, t, { a: 0, b: 1 }), false);
 
   // Sammelübernahme per Namensliste bestätigt die beanspruchte Person nicht.
   const bulk = await call('POST', ['people'], { names: ['Alice', 'Carol'] });
   assert.equal(bulk.status, 201);
   assert.deepEqual(bulk.data.map((p) => [p.name, p.approved, p.selfClaimed === true]), [['Alice', false, true], ['Carol', true, false]]);
   assert.equal(Access.isMember(db, attacker.id, event), false);
-  Access.bindPlayers(db, t, true);
+  Binding.bindPlayers(db, t, true);
   assert.equal(t.playerIds.Alice, null);
   assert.equal(t.playerIds.Carol, null, 'a matching name alone never binds');
   const carol = db.persons.find((p) => p.name === 'Carol').id;
-  Access.bindPlayers(db, t, true, { Carol: carol });
+  Binding.bindPlayers(db, t, true, { Carol: carol });
   assert.equal(t.playerIds.Carol, carol, 'explicit organizer selection binds');
 
   // Bewusste Freigabe genau dieser Person macht sie geprüft.
@@ -90,11 +91,11 @@ test('binding: self-claimed names never gain result rights; a deliberate organiz
   assert.equal(approve.status, 200);
   assert.equal(alice.selfClaimed, undefined);
   assert.equal(Access.isMember(db, attacker.id, event), true);
-  Access.bindPlayers(db, t, true);
+  Binding.bindPlayers(db, t, true);
   assert.equal(t.playerIds.Alice, null, 'approval alone does not bind a tournament slot');
-  Access.bindPlayers(db, t, true, { Alice: alice.id });
+  Binding.bindPlayers(db, t, true, { Alice: alice.id });
   assert.equal(t.playerIds.Alice, alice.id);
-  assert.equal(Access.mayReport(db, attacker.id, t, { a: 0, b: 1 }), true);
+  assert.equal(Binding.mayReport(db, attacker.id, t, { a: 0, b: 1 }), true);
 });
 
 test('binding: explicit person selection confirms; verified persons with other names stay unbound', async () => {
@@ -104,16 +105,16 @@ test('binding: explicit person selection confirms; verified persons with other n
   const single = await call('POST', ['people'], { name: 'Dora' });
   assert.equal(single.data.approved, true);
   t.participants = ['Dora', 'Dora X', 'Alice'];
-  Access.bindPlayers(db, t, true, { Dora: single.data.id });
+  Binding.bindPlayers(db, t, true, { Dora: single.data.id });
   assert.equal(t.playerIds.Dora, single.data.id);
   assert.equal(t.playerIds['Dora X'], null, 'no fuzzy or prefix match');
   assert.equal(t.playerIds.Alice, null);
   await call('POST', ['people'], { personIds: [alice.id] });
   assert.equal(alice.selfClaimed, undefined);
   assert.equal(event.attendees.find((a) => a.personId === alice.id).approved, true);
-  Access.bindPlayers(db, t, true, { Alice: alice.id });
+  Binding.bindPlayers(db, t, true, { Alice: alice.id });
   assert.equal(t.playerIds.Alice, alice.id);
   db.persons.find((p) => p.id === alice.id).name = 'Alicia';
-  Access.bindPlayers(db, t, true);
+  Binding.bindPlayers(db, t, true);
   assert.equal(t.playerIds.Alice, null, 'renamed persons lose the old name binding on refresh');
 });

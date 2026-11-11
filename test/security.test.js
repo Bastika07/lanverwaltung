@@ -9,6 +9,7 @@ const http = require('node:http');
 const net = require('node:net');
 const { spawn } = require('node:child_process');
 const Access = require('../lib/access');
+const Binding = require('../lib/tournaments'); // Bindung von Turniereinträgen an Personen
 const { readSnapshot } = require('../lib/storage');
 const root = path.resolve(__dirname, '..');
 const stamp = new Date().toISOString();
@@ -43,21 +44,21 @@ test('membership requires a live payment or explicit approval; teams require act
   e.attendees[0].approved = true;
   assert.equal(Access.isMember(db, 'buyer', e), true);
   const t = { participants: ['Team A', 'Team B'], teamSize: 2, members: { 'Team A': ['pa'], 'Team B': ['pb'] } };
-  assert.equal(Access.mayReport(db, 'buyer', t, { a: 0, b: 1 }), true);
-  assert.equal(Access.mayReport(db, 'outsider', t, { a: 0, b: 1 }), false);
+  assert.equal(Binding.mayReport(db, 'buyer', t, { a: 0, b: 1 }), true);
+  assert.equal(Binding.mayReport(db, 'outsider', t, { a: 0, b: 1 }), false);
 });
 test('individual match identity cannot be acquired by choosing or renaming a display name', () => {
   const db = fixture(), t = db.events[0].tournaments[0];
-  Access.bindPlayers(db, t);
+  Binding.bindPlayers(db, t);
   db.persons[0].name = 'Renamed';
   db.persons.push({ id: 'fake', name: 'Alice', discordId: 'outsider' });
-  assert.equal(Access.mayReport(db, 'outsider', t, { a: 0, b: 1 }), false);
-  assert.equal(Access.mayReport(db, 'buyer', t, { a: 0, b: 1 }), true);
+  assert.equal(Binding.mayReport(db, 'outsider', t, { a: 0, b: 1 }), false);
+  assert.equal(Binding.mayReport(db, 'buyer', t, { a: 0, b: 1 }), true);
   const unbound = { participants: ['Unknown'], members: {} };
-  Access.bindPlayers(db, unbound);
+  Binding.bindPlayers(db, unbound);
   db.persons.push({ id: 'later', name: 'Unknown', discordId: 'attacker' });
-  Access.bindPlayers(db, unbound);
-  assert.equal(Access.mayReport(db, 'attacker', unbound, { a: 0, b: null }), false);
+  Binding.bindPlayers(db, unbound);
+  assert.equal(Binding.mayReport(db, 'attacker', unbound, { a: 0, b: null }), false);
 });
 test('self-link cannot claim another person or grant approval; proof links paid tickets', () => {
   const db = fixture(), ctx = context(db), e = db.events[0];
