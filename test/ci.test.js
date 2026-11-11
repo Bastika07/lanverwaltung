@@ -115,3 +115,13 @@ test('CI: importierbares main-Ruleset verlangt CI und CodeQL ohne Bypass oder fr
   }
   assert.ok(contexts.includes('Analyze (javascript-typescript)') && contexts.includes('Analyze (python)'));
 });
+
+// Module werden über ihre Schnittstelle getestet. Ein Test, der Quelltext aus server.js schneidet und in vm
+// ausführt, zeigt eine fehlende Modulgrenze: dann die Logik nach lib/ ziehen und dort testen.
+test('CI: kein Test führt Quelltext-Auszüge aus server.js aus', () => {
+  const offenders = fs.readdirSync(__dirname).filter((file) => file.endsWith('.test.js')).filter((file) => {
+    const source = fs.readFileSync(path.join(__dirname, file), 'utf8');
+    return /readFileSync\([^)]*server\.js/.test(source) && /\bvm\.(?:runIn|createContext|Script)/.test(source);
+  });
+  assert.deepEqual(offenders, []);
+});

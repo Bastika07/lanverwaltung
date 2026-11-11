@@ -177,15 +177,7 @@ function isAdmin(req) {
   return true;
 }
 
-function checkPassword(pw) {
-  if (!ADMIN_PASSWORD || typeof pw !== 'string') return false;
-  // Ephemeral fixed-length comparison digests, not stored password verifiers.
-  // Neither digest is persisted/logged; timingSafeEqual needs equal byte lengths.
-  // Future persisted password verifiers must use a salted password KDF (scrypt/Argon2).
-  const a = crypto.createHash('sha256').update(String(pw)).digest();
-  const b = crypto.createHash('sha256').update(ADMIN_PASSWORD).digest();
-  return crypto.timingSafeEqual(a, b);
-}
+const checkPassword = (pw) => Security.checkPassword(pw, ADMIN_PASSWORD); // lib/security.js
 
 // ---------- Live-Updates (Server-Sent Events) ----------
 // type: 'tournament' | 'announce' | 'schedule' | 'info' | 'people' | 'settings'

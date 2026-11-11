@@ -31,7 +31,9 @@ function harness({ url = 'wss://gateway.discord.gg/', gatewayResult } = {}) {
     if (route === '/gateway/bot') return gatewayResult ? gatewayResult() : { url };
     return [];
   } };
-  const context = vm.createContext({ module: { exports: {} }, URL, WebSocket: Socket,
+  // gateway.js lädt nur lib/security.js (logText); alles andere fehlt in der Sandbox absichtlich
+  const sandboxRequire = (id) => { assert.equal(id, './security.js'); return require('../lib/security.js'); };
+  const context = vm.createContext({ module: { exports: {} }, require: sandboxRequire, URL, WebSocket: Socket,
     Math: Object.assign(Object.create(Math), { random: () => 0.5 }),
     setTimeout: (fn, ms) => schedule(fn, ms), clearTimeout: clear,
     setInterval: (fn, ms) => schedule(fn, ms, true), clearInterval: clear });
