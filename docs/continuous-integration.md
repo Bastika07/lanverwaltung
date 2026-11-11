@@ -49,6 +49,10 @@ Sie schützt ausschließlich `main`: Pull Request erforderlich, alle 15 CI-Check
 
 Die vorhandenen Checknamen und die GitHub-Actions-App-ID wurden gegen die tatsächlichen Check-Runs des Repositorys geprüft; der neue ZAP-Check entspricht dem Jobnamen im Workflow. Bei Umbenennung eines CI-Jobs auch Ruleset und Vorlage aktualisieren. Erst aktivieren, wenn der DAST-Workflow im PR vorhanden ist und alle Checks erfolgreich gelaufen sind. Nur ein Push auf diesen Featurebranch startet wegen der Branchfilter noch keine CI: Dafür einen Pull Request gegen `main` öffnen. CodeQL muss Ergebnisse für den PR und den Zielbranch haben. Bestehende Befunde können den Merge blockieren; dann bewerten und beheben, nicht das Gate blind abschwächen. Die Code-Scanning-Regel muss vom GitHub-Tarif und der Repository-Konfiguration unterstützt werden.
 
+## Rollout
+
+Nach dem Merge rollt der Docker-Host jeden grünen `main`-Commit automatisch auf Dev aus; die Produktion bekommt dasselbe Image per `promote.sh`. Ablauf, Sicherungen und eingeschränkter SSH-Zugang: [rollout.md](rollout.md).
+
 ## PR blockiert oder ohne Checks
 
 - **„no checks reported“:** Meist ein Konflikt mit `main`. GitHub startet `pull_request`-Workflows nur, wenn sich der Merge-Commit bilden lässt. Den Branch auf aktuellem `origin/main` neu aufsetzen.

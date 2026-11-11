@@ -1,0 +1,22 @@
+# Vorlage für /etc/lanverwaltung-rollout.conf (root:root, 600). Wird von deploy.sh und promote.sh eingelesen.
+# Nur Werte dieser Installation; nichts davon gehört ins Repo.
+
+# Dev: deploy.sh rollt jeden grünen main-Commit automatisch aus (Image: <DEV_IMAGE>:development-<commit>)
+DEV_STACK=/opt/stacks/lanverwaltung
+DEV_PROJECT=lanverwaltung
+DEV_CONTAINER=lanverwaltung
+DEV_IMAGE=lanverwaltung
+DEV_HEALTH_URL=https://dev.example.invalid/api/health
+DEV_BACKUPS=/opt/backups/lanverwaltung
+
+# Produktion: promote.sh befördert das Dev-Image (Image: <PROD_IMAGE>:production-<commit>)
+PROD_STACK=/opt/stacks/produktion
+PROD_PROJECT=produktion
+PROD_CONTAINER=produktion
+PROD_IMAGE=produktion
+PROD_VOLUME=produktion_turnierbaum-data
+PROD_DOMAIN=https://lan.example.invalid
+PROD_BACKUPS=/opt/backups/produktion
+
+# Optional: anderes GitHub-Repo (Standard: Bastika07/lanverwaltung)
+# REPO=Bastika07/lanverwaltung
