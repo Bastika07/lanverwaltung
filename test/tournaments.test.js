@@ -315,3 +315,15 @@ test('Zusammenführen: Zielperson übernimmt die Turnierleitung, ohne Dopplung',
   assert.deepEqual(only.referees, ['b']);
   assert.deepEqual(both.referees, ['b']);
 });
+
+test('Anmeldung: voll oder zu wenig Coins legt keine Person an', () => {
+  const full = signup({ participants: ['Synthetic X'], maxParticipants: 1 });
+  assert.throws(() => full.of.join(full.as(1), full.t), (err) => err.code === 'full');
+  assert.equal(full.created(), 0, 'full: person() not called');
+  const team = signup({ teamSize: 2, participants: ['Team'], members: { Team: ['x'] }, maxParticipants: 1 });
+  assert.throws(() => team.of.foundTeam(team.as(1), team.t, 'Neu'), (err) => err.code === 'full');
+  assert.equal(team.created(), 0, 'foundTeam: person() not called');
+  const poor = signup({ coins: 2 }, () => 1);
+  assert.throws(() => poor.of.join(poor.as(1), poor.t), (err) => err.code === 'coins' && err.data.left === 1);
+  assert.equal(poor.created(), 0, 'coins: person() not called');
+});
