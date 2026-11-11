@@ -10,13 +10,13 @@ test('Spielplan-Ansicht: unveränderte Revision nutzt die Berechnung wieder, jed
   let calls = 0;
   Bracket.compute = (x) => ({ id: x.id, call: ++calls });
   t.after(() => { Bracket.compute = compute; });
-  const { of } = tournamentModule();
+  const { of, save } = tournamentModule();
   const a = { id: 'a' }, b = { id: 'b' };
   assert.equal(of.view(a), of.view(a));
   assert.equal(calls, 1);
   of.view(b);
   assert.equal(calls, 2, 'each tournament has its own entry');
-  of.changed(a); // speichert
+  save(); // irgendeine Speicherung
   assert.equal(of.view(a).call, 3, 'save invalidates');
   assert.equal(of.view(a).call, 3);
 });

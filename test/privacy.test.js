@@ -2,6 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const eraseAccount = require('../lib/privacy');
+const { tournamentModule, discordSide } = require('../test-support/tournaments.cjs');
 
 test('account deletion pseudonymizes only the linked person and preserves other paid ticket holders', () => {
   const person = { id: 'own', name: 'Alice', discordId: '12345', discordName: 'Discord Alice', steam: 'steam-id', clan: 'Clan', note: 'Private', ticketOwnerId: '12345' };
@@ -18,6 +19,8 @@ test('account deletion pseudonymizes only the linked person and preserves other 
   let saved = 0, revoked;
   const ctx = { db, save: () => { saved++; }, broadcast() {}, settings: () => ({}), str: (v) => String(v || ''), HttpError: Error, Discord: {}, revokeAdminSessions: (id) => { revoked = id; } };
   ctx.event = require('../lib/event')(ctx);
+  // Echtes Turniermodul samt Discord-Seite (ohne Discord): Einträge und Kanalzuordnung folgen dem neuen Namen
+  ctx.tournaments = tournamentModule({ db, notifier: discordSide({ event: db.events[0] }).side }).tournaments;
   ctx.people = require('../lib/people')(ctx);
   ctx.tickets = require('../lib/tickets')(ctx);
   const codeBefore = db.events[0].orders[0].tickets.map((t) => t.code);

@@ -206,3 +206,80 @@ test('Sichten: Entwürfe nur für die Orga, Protokoll nur für die Turnierleitun
   assert.deepEqual(of.overview({}).map((x) => x.id), []);
   assert.deepEqual(of.overview({ admin: true }).map((x) => x.id), ['cup']);
 });
+
+// Offene Anmeldung (Entwurf) für Einzel- bzw. Teamturniere
+function signup(extra = {}, coinBudget = () => 0) {
+  const persons = [{ id: 'p1', name: 'Synthetic One', discordId: '100000000000000001' }, { id: 'p2', name: 'Synthetic Two', discordId: '100000000000000002' }];
+  const t = { id: 'cup', name: 'Cup', type: 'ko', status: 'draft', signup: true, participants: [], members: {}, playerIds: {}, order: [], results: {}, ...extra };
+  const mod = tournamentModule({ db: { persons }, event: { tournaments: [t] }, coinBudget });
+  let created = 0;
+  const as = (i) => ({ discordId: persons[i].discordId, person: () => { created++; return persons[i]; } });
+  return { t, as, created: () => created, ...mod };
+}
+
+test('Anmeldung: bindet an die eigene Person, abmelden nur den eigenen Eintrag, geschlossen ohne Personenanlage', () => {
+  const { t, as, of, created, saves } = signup();
+  of.join(as(0), t);
+  assert.deepEqual(t.participants, ['Synthetic One']);
+  assert.equal(t.playerIds['Synthetic One'], 'p1');
+  assert.equal(of.join(as(0), t).already, true);
+  assert.equal(of.leave(as(1), t).notSignedUp, true, 'someone else cannot remove the entry');
+  of.leave(as(0), t);
+  assert.deepEqual(t.participants, []);
+  const before = created();
+  t.signup = false;
+  assert.throws(() => of.join(as(1), t), (err) => err.code === 'closed');
+  assert.equal(created(), before, 'no person is created for a closed signup');
+  t.signup = true; t.teamSize = 2;
+  assert.throws(() => of.join(as(1), t), (err) => err.code === 'team-tournament');
+  assert.equal(saves.length, 2);
+});
+
+test('Teams: Gründen prüft vor dem Ändern, Beitreten und Verlassen gleichen Discord ab', () => {
+  const { t, as, of, notes } = signup({ teamSize: 2 });
+  assert.throws(() => of.foundTeam(as(0), t, 'X'.repeat(61)), /60 Zeichen/);
+  assert.deepEqual(t.members, {}, 'rejected team leaves no members behind');
+  assert.deepEqual(t.participants, []);
+  of.foundTeam(as(0), t, '__proto__');
+  assert.deepEqual(Object.keys(t.members), ['__proto__']);
+  assert.throws(() => of.foundTeam(as(0), t, 'Other'), (err) => err.code === 'in-team' && err.data.team === '__proto__');
+  notes.length = 0;
+  of.joinTeam(as(1), t, '__PROTO__');
+  assert.deepEqual(t.members.__proto__, ['p1', 'p2']);
+  assert.deepEqual(notes.map(([name]) => name), ['changed'], 'joining a team syncs Discord');
+  assert.throws(() => of.joinTeam(as(1), t, '__proto__'), (err) => err.code === 'in-team');
+  of.leaveTeam(as(1), t);
+  assert.deepEqual(t.members.__proto__, ['p1']);
+  assert.equal(of.leaveTeam(as(0), t).emptied, true);
+  assert.deepEqual(t.participants, []);
+  assert.equal(Object.hasOwn(t.members, '__proto__'), false);
+});
+
+test('Coins und Teilnehmerlimit werden im Modul geprüft', () => {
+  const prize = { id: 'prize', name: 'Prize', status: 'draft', signup: true, participants: [], members: {}, playerIds: {}, coins: 2 };
+  const { t, as, of, event } = signup({ coins: 2, maxParticipants: 1 }, () => 3);
+  event.tournaments.push(prize);
+  of.join(as(0), t);
+  assert.throws(() => of.join(as(1), t), (err) => err.code === 'full' && err.data.max === 1);
+  assert.throws(() => of.join(as(0), prize), (err) => err.code === 'coins' && err.data.left === 1 && err.data.budget === 3);
+  const coins = of.coins({ id: 'p1' });
+  assert.deepEqual({ budget: coins.budget, used: coins.used, left: coins.left }, { budget: 3, used: 2, left: 1 });
+  of.leave(as(0), t);
+  of.join(as(0), prize);
+  assert.equal(of.coins({ id: 'p1' }).left, 1, 'leaving returns the coins');
+});
+
+test('Personen: Umbenennen folgt nur gebundenen Einzeleinträgen, Zusammenführen übernimmt Einträge und Teams', () => {
+  const single = { id: 's', participants: ['Alice', 'Alice2'], playerIds: { Alice: 'a', Alice2: null }, members: {} };
+  const typed = { id: 'u', participants: ['Alice'], playerIds: { Alice: null }, members: {} };
+  const team = { id: 't', teamSize: 2, participants: ['Team'], playerIds: {}, members: { Team: ['a', 'b'] } };
+  const { of, notes } = tournamentModule({ event: { tournaments: [single, typed, team] } });
+  of.renamePerson('a', 'Alice', 'Alicia');
+  assert.deepEqual(single.participants, ['Alicia', 'Alice2']);
+  assert.equal(single.playerIds.Alicia, 'a');
+  assert.deepEqual(typed.participants, ['Alice'], 'unbound equal name stays');
+  assert.deepEqual(notes, [['entryRenamed', single, 'Alice', 'Alicia']]);
+  of.mergePersons('a', 'b');
+  assert.equal(single.playerIds.Alicia, 'b');
+  assert.deepEqual(team.members.Team, ['b'], 'no duplicate member');
+});

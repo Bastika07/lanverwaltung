@@ -292,7 +292,7 @@ function discordPost(text, onResult, kind = 'general', users = [], opts = {}) {
 // Turniermodul (lib/tournaments.js, samt /api/tournaments) und seine Discord-Seite (Kanäle, Ansagen)
 const tournamentDiscord = require('./lib/tournament-discord.js')({ Discord, settings, moduleOn, people: () => modules.people,
   events: () => modules.event, discordPost, save, broadcast, publicUrl: PUBLIC_URL });
-const tournaments = require('./lib/tournaments.js')({ db, save, broadcast, HttpError, str, notifier: tournamentDiscord, revision: () => revision,
+const tournaments = require('./lib/tournaments.js')({ db, save, broadcast, HttpError, str, notifier: tournamentDiscord, revision: () => revision, coinBudget,
   http: { send, readBody, isAdmin, account: (req) => modules.accounts.current(req), requireUser: (req) => modules.accounts.requireUser(req),
     rateLimit: Security.rateLimit, event: () => modules.event.scoped() } });
 
@@ -521,7 +521,7 @@ ctx.catering = modules.catering = require('./lib/catering.js')(ctx);
 modules.website = require('./lib/website.js')(ctx);
 require('./lib/security-migration.js')(ctx);
 if (!db.meta.matchIdentityVersion) {
-  for (const e of modules.event.all()) for (const t of e.tournaments) Access.bindPlayers(db, t);
+  for (const e of modules.event.all()) tournaments.of(e).bindLegacy();
   db.meta.matchIdentityVersion = 1;
   save();
 }

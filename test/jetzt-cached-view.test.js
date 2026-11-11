@@ -34,7 +34,7 @@ test('/jetzt: nach einer Speicherung erscheinen die neuen spielbaren Begegnungen
   const round = compute(tour).rounds[0];
   assert.match(jetzt(), /Spieltag 1/);
   for (const m of round) tour.results[m.id] = { a: 1, b: 0, pa: m.a, pb: m.b };
-  mod.of.changed(tour); // speichert -> neue Revision
+  mod.save(); // wie jede Speicherung: neue Revision
   const after = jetzt();
   assert.match(after, /Spieltag 2/);
   assert.doesNotMatch(after, /Spieltag 1/);

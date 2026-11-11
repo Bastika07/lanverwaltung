@@ -1,6 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const { tournamentModule } = require('../test-support/tournaments.cjs');
 const Bracket = require('../public/bracket.js');
 
 const names = (n) => Array.from({ length: n }, (_, i) => `Synthetic ${i}`);
@@ -109,15 +110,12 @@ test('Coins und Teilnehmerlimit bei /anmelden und /team', () => {
   const prize1 = { id: 'a', name: 'Preis A', status: 'draft', signup: true, participants: [], playerIds: {}, members: {}, coins: 2 };
   const prize2 = { id: 'b', name: 'Preis B', status: 'draft', signup: true, participants: [], playerIds: {}, members: {}, coins: 2 };
   const full = { id: 'c', name: 'Voll', status: 'draft', signup: true, participants: ['Synthetic X'], playerIds: {}, members: {}, maxParticipants: 1 };
-  const list = [free, prize1, prize2, full];
-  const forEvent = {
-    list: () => list, openForSignup: () => list,
-    // wie server.js: Bindungen nur für Einträge, die es noch gibt
-    setParticipants(t, n, bind = {}) { const ids = { ...t.playerIds, ...bind }; t.participants = n; t.playerIds = Object.fromEntries(n.map((x) => [x, ids[x] || null])); },
-  };
+  const event = { id: 'e', tournaments: [free, prize1, prize2, full] };
+  // Echtes Turniermodul (Coins, Teilnehmerlimit, Bindung), ohne Discord und ohne Speicher
+  const { tournaments } = tournamentModule({ db: { persons: Object.values(persons) }, event, coinBudget: () => 3 });
   const commands = require('../lib/commands.js')({
     Discord: { md: String }, settings: () => ({ coinBudget: 3 }), moduleOn: () => true, mayViewDiscord: () => true,
-    tournaments: { of: () => forEvent }, event: { current: () => ({}) }, schedule: {}, announcements: {},
+    tournaments, event: { current: () => event }, schedule: {}, announcements: {},
     people: { byDiscord: (id) => persons[id], selfLink: () => null },
   });
   const run = (name, user, opts) => commands.find(name).run({ user: { id: user }, opts });
