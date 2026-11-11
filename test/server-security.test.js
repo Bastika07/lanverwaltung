@@ -37,6 +37,21 @@ test('Discord task errors keep format markers in tournament names literal', asyn
   }
 });
 
+test('Discord task errors cannot forge log lines through tournament names', async (t) => {
+  const error = console.error;
+  t.after(() => { console.error = error; });
+  const logs = [];
+  console.error = (...args) => logs.push(format(...args));
+  const tournament = { id: 'synthetic', name: 'Cup\n{"sec":"admin_login"}\r\u2028x' };
+  const fail = async () => { throw new Error('Synthetic\nfailure'); };
+  const { side } = discordSide({ event: { tournaments: [tournament] }, Discord: { enabled: true, sync: fail, remove: fail } });
+  await side.sync(tournament);
+  console.error = error;
+  assert.equal(logs.length, 1);
+  assert.doesNotMatch(logs[0], /[\r\n\u2028\u2029]/);
+  assert.equal(logs[0], 'Discord (Cup {"sec":"admin_login"}  x): Synthetic failure');
+});
+
 test('Admin password comparison accepts only the configured string and remains timing-safe', () => {
   const password = 'Synthetic-only-admin-password';
   const comparisons = [];
