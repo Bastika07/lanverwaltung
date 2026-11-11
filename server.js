@@ -492,7 +492,7 @@ ctx.schedule = modules.schedule = require('./lib/schedule.js')(ctx);
 ctx.people = modules.people = require('./lib/people.js')(ctx);
 modules.info = require('./lib/info.js')(ctx);
 modules.details = require('./lib/details.js')(ctx);
-modules.servers = require('./lib/servers.js')(ctx);
+ctx.servers = modules.servers = require('./lib/servers.js')(ctx);
 modules.tournaments = tournaments; // /api/tournaments (ausgeschaltet nur für die Orga sichtbar)
 modules.cs2 = require('./lib/tmt.js')(ctx); // CS2-Matches über TMT2 (eigener Container)
 ctx.accounts = modules.accounts = require('./lib/accounts.js')(ctx);
