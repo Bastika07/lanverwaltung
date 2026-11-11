@@ -1,26 +1,24 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
 const Bracket = require('../public/bracket.js');
 const { isolated } = require('../test-support/isolated.cjs');
+const { tournamentModule } = require('../test-support/tournaments.cjs');
 
-test('cachedView: unveränderte Revision nutzt die Berechnung wieder, jede Speicherung erneuert sie', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8').replace(/\r\n/g, '\n').match(/const viewCache = new WeakMap\(\);\nfunction cachedView[\s\S]*?\n\}/);
-  assert.ok(source, 'server.js cachedView must exist');
+test('Spielplan-Ansicht: unveränderte Revision nutzt die Berechnung wieder, jede Speicherung erneuert sie', (t) => {
+  const compute = Bracket.compute;
   let calls = 0;
-  const sandbox = { WeakMap, revision: 0, Bracket: { compute: (t) => ({ id: t.id, call: ++calls }) } };
-  const cachedView = vm.runInNewContext(`${source[0]}\ncachedView`, sandbox);
+  Bracket.compute = (x) => ({ id: x.id, call: ++calls });
+  t.after(() => { Bracket.compute = compute; });
+  const { of } = tournamentModule();
   const a = { id: 'a' }, b = { id: 'b' };
-  assert.equal(cachedView(a), cachedView(a));
+  assert.equal(of.view(a), of.view(a));
   assert.equal(calls, 1);
-  cachedView(b);
+  of.view(b);
   assert.equal(calls, 2, 'each tournament has its own entry');
-  sandbox.revision++;
-  assert.equal(cachedView(a).call, 3, 'save invalidates');
-  assert.equal(cachedView(a).call, 3);
+  of.changed(a); // speichert
+  assert.equal(of.view(a).call, 3, 'save invalidates');
+  assert.equal(of.view(a).call, 3);
 });
 
 // Rundenturnier in den synthetischen Daten; „buyer“ ist an Platz 0 gebunden.

@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const vm = require('node:vm');
-const Access = require('../lib/access');
+const { tournamentModule } = require('../test-support/tournaments.cjs');
 
 const RESERVED = ['__proto__', 'constructor', 'toString', 'hasOwnProperty'];
 const root = path.resolve(__dirname, '..');
@@ -71,7 +71,7 @@ test('Discord sync: reserved participant names keep exactly one managed channel 
   assert.equal(mock.channels.size, 0, 'all channels and the category are deleted');
 });
 
-// Echte /team-Befehle mit tournamentApi und applyMembers aus server.js.
+// Echte /team-Befehle mit dem Turniermodul.
 function teamSetup() {
   const mods = { tournaments: true, people: true };
   class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
@@ -82,18 +82,15 @@ function teamSetup() {
     Discord: { enabled: false, md: String }, moduleOn: (k) => mods[k], requireAdmin() {}, readBody: async () => ({}), send() {} };
   ctx.event = require('../lib/event')(ctx);
   ctx.people = require('../lib/people')(ctx);
-  const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
-  const sandbox = { db, Access, cleanParticipants: (n) => n.map(String), discordSync() {}, save() {}, broadcast() {}, isFinished: () => false, allTournaments: () => db.tournaments, wantsChannels: () => false };
-  vm.runInNewContext(server.match(/function applyMembers[\s\S]*?\n\}/)[0], sandbox);
-  const tournaments = vm.runInNewContext(`(${server.match(/const tournamentApi = (\{[\s\S]*?\n\});/)[1]})`, sandbox);
+  const { tournaments } = tournamentModule({ db, event: db.events[0] });
   const commands = require('../lib/commands')({ ...ctx, tournaments, announcements: {}, schedule: {}, mayViewDiscord: () => true });
   const t = { id: 'teams', name: 'Teams', type: 'ko', status: 'draft', signup: true, teamSize: 2, participants: [], members: {}, order: [], results: {} };
   db.tournaments.push(t);
-  return { t, sandbox, team: (sub, user, opts) => commands.find('team').run({ sub, user, opts: { turnier: 'teams', ...opts } }) };
+  return { t, tournaments, team: (sub, user, opts) => commands.find('team').run({ sub, user, opts: { turnier: 'teams', ...opts } }) };
 }
 
 test('/team: reserved team names are stored as normal data through found, join, rename and leave', () => {
-  const { t, sandbox, team } = teamSetup();
+  const { t, tournaments, team } = teamSetup();
   const users = [1, 2, 3, 4].map((n) => ({ id: `20000000000000000${n}`, name: `Player ${n}` }));
   team('gruenden', users[0], { name: '__proto__' });
   team('gruenden', users[1], { name: 'constructor' });
@@ -108,9 +105,9 @@ test('/team: reserved team names are stored as normal data through found, join, 
 
   const renames = Object.create(null);
   renames.constructor = 'Builders';
-  sandbox.applyMembers(t, ['__proto__', 'Builders'], renames);
+  tournaments.applyMembers(t, ['__proto__', 'Builders'], renames);
   assert.deepEqual(Object.keys(t.members).sort(), ['Builders', '__proto__']);
-  sandbox.applyMembers(t, ['__proto__', 'Builders']); // ohne Umbenennungen: Standard-{} darf keine Prototyp-Treffer liefern
+  tournaments.applyMembers(t, ['__proto__', 'Builders']); // ohne Umbenennungen: Standard-{} darf keine Prototyp-Treffer liefern
   assert.deepEqual(Object.keys(t.members).sort(), ['Builders', '__proto__']);
 
   t.participants = ['__proto__', 'Builders'];

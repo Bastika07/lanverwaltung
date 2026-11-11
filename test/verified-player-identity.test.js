@@ -1,15 +1,13 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
 const Access = require('../lib/access');
+const { tournamentModule } = require('../test-support/tournaments.cjs');
 
 const mods = Object.fromEntries(['details', 'tournaments', 'announcements', 'schedule', 'info', 'people', 'seating', 'beamer', 'tickets', 'servers'].map((k) => [k, true]));
 class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
 
-// Echte Module: people, commands und das tournamentApi-Objekt aus server.js (mit neutralen Stubs).
+// Echte Module: people, commands und das Turniermodul (ohne Discord).
 function setup() {
   let body;
   const db = { meta: { securityVersion: 1, settings: { modules: mods } }, persons: [], accounts: [],
@@ -21,10 +19,7 @@ function setup() {
     requireAdmin() {}, readBody: async () => body, send: (res, status, data) => Object.assign(res, { status, data }) };
   ctx.event = require('../lib/event')(ctx);
   ctx.people = require('../lib/people')(ctx);
-  const source = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8').match(/const tournamentApi = (\{[\s\S]*?\n\});/);
-  assert.ok(source, 'server.js tournamentApi must exist');
-  const tournaments = vm.runInNewContext(`(${source[1]})`, { db, Access, cleanParticipants: (names) => names.map(String),
-    applyMembers() {}, discordSync() {}, save() {}, broadcast() {}, isFinished: () => false, allTournaments: () => db.tournaments, wantsChannels: () => false });
+  const { tournaments } = tournamentModule({ db, event: db.events[0] });
   const commands = require('../lib/commands')({ ...ctx, tournaments, announcements: {}, schedule: {}, mayViewDiscord: () => true });
   const t = { id: 'cup', name: 'Cup', type: 'ko', status: 'draft', signup: true, teamSize: 1, participants: [], members: {}, playerIds: {}, order: [], results: {} };
   db.tournaments.push(t);
