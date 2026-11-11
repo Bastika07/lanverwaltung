@@ -57,6 +57,7 @@ Es gibt **kein** `npm install`/`npm ci` und keinen Lockfile. Nichts davon anlege
 - PRs gegen `main`. Vor dem PR `npm run check` und `npm test` lokal grün haben.
 - PR ohne Checks oder trotz grüner Checks blockiert: [docs/continuous-integration.md](docs/continuous-integration.md#pr-blockiert-oder-ohne-checks).
 - Keine Secrets, `.env`-Dateien, Datenbanken oder Sicherungen committen.
+- Rollout auf Dev und Produktion: [docs/rollout.md](docs/rollout.md).
 
 ## Agent skills
 
