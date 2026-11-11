@@ -8,7 +8,9 @@ const crypto = require('node:crypto');
 const http = require('node:http');
 const net = require('node:net');
 const { spawn } = require('node:child_process');
-const Access = require('../lib/access');
+const Participation = require('../lib/participation');
+// Teilnehmerrechte eines Discord-Kontos im Event
+const hasRights = (db, discordId, e) => Participation({ db }).hasRights(e, { discordId });
 const Binding = require('../lib/tournaments'); // Bindung von Turniereinträgen an Personen
 const { readSnapshot } = require('../lib/storage');
 const root = path.resolve(__dirname, '..');
@@ -38,11 +40,11 @@ function context(db) {
 }
 test('membership requires a live payment or explicit approval; teams require actual membership', () => {
   const db = fixture(), e = db.events[0];
-  assert.equal(Access.isMember(db, 'buyer', e), true);
+  assert.equal(hasRights(db, 'buyer', e), true);
   e.orders[0].status = 'cancelled';
-  assert.equal(Access.isMember(db, 'buyer', e), false);
+  assert.equal(hasRights(db, 'buyer', e), false);
   e.attendees[0].approved = true;
-  assert.equal(Access.isMember(db, 'buyer', e), true);
+  assert.equal(hasRights(db, 'buyer', e), true);
   const t = { participants: ['Team A', 'Team B'], teamSize: 2, members: { 'Team A': ['pa'], 'Team B': ['pb'] } };
   assert.equal(Binding.mayReport(db, 'buyer', t, { a: 0, b: 1 }), true);
   assert.equal(Binding.mayReport(db, 'outsider', t, { a: 0, b: 1 }), false);
@@ -65,7 +67,7 @@ test('self-link cannot claim another person or grant approval; proof links paid 
   assert.throws(() => ctx.people.selfLink({ id: 'outsider', name: 'X' }, 'Bob'), { status: 403 });
   const p = ctx.people.selfLink({ id: 'outsider', name: 'X' }, 'New person');
   assert.equal(p.approved, false);
-  assert.equal(Access.isMember(db, 'outsider', e), false);
+  assert.equal(hasRights(db, 'outsider', e), false);
   db.persons[0].discordId = null;
   ctx.people.selfLink({ id: 'buyer', name: 'Buyer' }, 'Alice');
   assert.equal(db.persons[0].discordId, 'buyer');

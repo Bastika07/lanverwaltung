@@ -13,8 +13,15 @@ Ein Mensch, der eventübergreifend erhalten bleibt; Ticketnamen und Anzeigenamen
 _Avoid_: Spieler (für die Identität), User
 
 **Teilnehmer**:
-Eine Person, die in einem Event über ein bezahltes Teilnehmerticket oder eine Orga-Freigabe berechtigt ist.
+Eine Person, die in einem Event selbst ein bezahltes Teilnehmerticket hält oder eine Orga-Freigabe hat.
 _Avoid_: Mitglied, Besucher
+
+**Teilnehmerrechte**:
+Zugang eines Kontos zu Bereichen „nur für Teilnehmer“: als Käufer eines bezahlten Teilnehmertickets oder über eine verknüpfte Person, die Teilnehmer ist.
+_Avoid_: Mitgliedschaft, Member
+
+**Teilnehmerticket**:
+Ein Ticket einer Ticketart, die als Teilnehmer zählt; Zuschauer- oder Tagestickets gehören nicht dazu.
 
 ## Turniere
 
