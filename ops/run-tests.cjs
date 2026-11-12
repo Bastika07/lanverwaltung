@@ -7,7 +7,7 @@ const { spawnSync } = require('node:child_process');
 const unitFiles = new Set(['ci.test.js', 'dockerfile-permissions.test.js', 'catering-render.test.js', 'markdown.test.js',
   'guest-server-markdown.test.js', 'privacy.test.js', 'render-security.test.js', 'tmt-election.test.js', 'website.test.js',
   'tournaments.test.js', 'jetzt-cached-view.test.js', 'mention-bound-players.test.js', 'schedule-tick-event.test.js', 'participation.test.js', 'speech.test.js', 'turnier-logik.test.js',
-  'rollout-promote.test.js']);
+  'rollout-promote.test.js', 'lan-board.test.js']);
 function selectTests(files, suite) {
   if (!['unit', 'integration'].includes(suite)) throw new Error(`Unknown test suite: ${suite}`);
   const selected = files.filter((file) => unitFiles.has(file) === (suite === 'unit')).sort();
