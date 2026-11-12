@@ -25,6 +25,14 @@ test('CI: code checks reject malformed JavaScript and invalid project JSON', (t)
   assert.match(bad.stderr.trim().split('\n').at(-1), /^FEHLER: Syntaxfehler in 1 von \d+ Dateien/);
   assert.doesNotMatch(bad.stdout, /Checked/);
   fs.unlinkSync(path.join(root, 'bad.js'));
+  // Shell-Skripte (Rollout läuft als root) ebenfalls: Syntaxfehler fallen in CI auf, nicht erst auf dem Host
+  fs.writeFileSync(path.join(root, 'ops/ok.sh'), 'echo ok\n');
+  assert.match(run().stdout, /, 1 shell scripts and project JSON/);
+  fs.writeFileSync(path.join(root, 'ops/bad.sh'), 'if then\n');
+  const badShell = run();
+  assert.notEqual(badShell.status, 0, 'shell syntax errors must fail CI');
+  assert.match(badShell.stderr.trim().split('\n').at(-1), /^FEHLER: Syntaxfehler in 1 von \d+ Dateien/);
+  fs.unlinkSync(path.join(root, 'ops/bad.sh'));
   fs.writeFileSync(path.join(root, 'package.json'), '{broken');
   assert.notEqual(run().status, 0, 'invalid JSON must fail CI');
 });
