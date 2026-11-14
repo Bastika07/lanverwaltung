@@ -304,7 +304,7 @@ function bindTicketPage(a, sellable, ev) {
   });
   if ($('deleteAccount')) {
     $('deleteAccount').onclick = async () => {
-      if (!confirm('Konto löschen und verknüpfte Person pseudonymisieren? Bezahlte Tickets bleiben gültig, Zugriff auf Bestellungen und Gastserver entfällt.')) return;
+      if (!confirm('Konto löschen und verknüpfte Person pseudonymisieren? Bezahlte Tickets bleiben gültig, Zugriff auf Bestellungen und Gastserver entfällt. Aus Turnieren, die noch nicht gestartet sind, wirst du ausgetragen; bist du Captain, wird dein Team aufgelöst. Deine Coins verfallen.')) return;
       await api('DELETE', '/account');
       Tix.account = null;
       toast('Konto gelöscht');

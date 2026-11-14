@@ -38,6 +38,13 @@ _Avoid_: verknüpfter Name, gematchter Spieler
 
 **Team**:
 Ein Turniereintrag in einem Teamturnier, dessen Mitglieder gebundene Personen sind.
+
+**Captain**:
+Die Person, die ein Team gegründet hat (oder die die Orga dazu macht); bestätigt Beitrittsanfragen und verwaltet das Team bis zum Turnierstart. Verlässt sie das Team, ist es aufgelöst.
+_Avoid_: Teamchef, Teamleiter
+
+**Beitrittsanfrage**:
+Wunsch einer Person, einem Team beizutreten; wird erst mit der Bestätigung des Captains zur Mitgliedschaft. Je Person und Turnier gibt es höchstens eine.
 _Avoid_: Clan (Clan ist eine Personenangabe, kein Turniereintrag)
 
 **Spielplan**:
@@ -81,7 +88,7 @@ Die Liste aller Meldungen, Bestätigungen und Entscheidungen eines Turniers, sic
 _Avoid_: Log, Verlauf
 
 **Coins**:
-Ein Budget pro Person und Event, mit dem sich Personen für Turniere anmelden, die Coins kosten; Abmelden gibt sie zurück.
+Ein Budget pro Person und Event, mit dem sich Personen für Turniere anmelden, die Coins kosten; Abmelden gibt sie zurück. Im Team zahlt jedes Mitglied selbst, sobald der Captain es aufgenommen hat.
 _Avoid_: Punkte, Credits
 
 ## Rollen

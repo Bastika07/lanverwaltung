@@ -371,15 +371,23 @@ function bindRefCard(t) {
   });
 }
 
-// Team-Mitglieder (über Discord gegründete/beigetretene Teams)
+// Captain eines Teams wie auf dem Server: gespeichert, sonst das erste Mitglied
+function teamCaptain(t, team) {
+  const ids = t.members && Object.hasOwn(t.members, team) ? t.members[team] : [];
+  const c = t.captains && Object.hasOwn(t.captains, team) ? t.captains[team] : null;
+  return ids.includes(c) ? c : ids[0] || null;
+}
+
+// Team-Mitglieder (über Discord oder „Meine Turniere“ gegründete Teams)
 async function teamsCard(t) {
   if ((t.teamSize || 1) <= 1 || !t.members || !Object.keys(t.members).length || !on('people')) return '';
   const { people } = await api('GET', '/people').catch(() => ({ people: [] }));
   const byId = Object.fromEntries(people.map((p) => [p.id, p]));
   return `<div class="card" style="margin-top:16px"><h2>👥 Teams</h2><div class="teams">${t.participants.map((team) => {
     const m = (Object.hasOwn(t.members, team) ? t.members[team] : []).map((id) => byId[id]).filter(Boolean); // auch „__proto__“
+    const captain = teamCaptain(t, team);
     return `<div class="team"><strong>${esc(team)}</strong> <span class="meta">(${m.length}/${t.teamSize})</span>
-      <div class="meta">${m.map((p, i) => esc(p.name) + (i === 0 ? ' 👑' : '')).join(', ') || '–'}</div></div>`;
+      <div class="meta">${m.map((p) => esc(p.name) + (p.id === captain ? ' 👑' : '')).join(', ') || '–'}</div></div>`;
   }).join('')}</div></div>`;
 }
 
@@ -802,7 +810,7 @@ function tournamentForm(t, isNew) {
       <p class="hint">Gewinnt der Sieger der Verliererrunde das Grand Final, folgt ein Entscheidungsspiel.</p></div>
     <div class="field"><label for="fTeam">Spieler pro Team</label>
       <input id="fTeam" type="number" min="1" max="20" value="${t.teamSize || 1}" ${locked ? 'disabled' : ''} style="max-width:120px">
-      <p class="hint">1 = Einzelspieler. Bei Teams treten sich Teams gegenüber; über Discord können Spieler Teams gründen und beitreten.</p></div>
+      <p class="hint">1 = Einzelspieler. Bei Teams treten sich Teams gegenüber; bei offener Selbstanmeldung gründen Spieler Teams unter „Meine Turniere“ oder im Discord, der Captain bestätigt Beitritte.</p></div>
     <div class="field"><label for="fPart">Teilnehmer / Teams <span class="meta">(einer pro Zeile${isNew || !locked ? ', Reihenfolge = Setzliste' : ''})</span></label>
       <textarea id="fPart" placeholder="Anna&#10;Bernd&#10;Clara&#10;...">${esc(t.participants.join('\n'))}</textarea>
       ${!locked && on('people') ? '<button type="button" class="small" id="fPick">👥 Aus Teilnehmerliste wählen</button><div id="fPicker"></div>' : ''}
@@ -823,12 +831,12 @@ function tournamentForm(t, isNew) {
     ${on('people') ? `<div class="field"><label>Turnierleiter <span class="meta">(dürfen Ergebnisse eintragen, korrigieren, kampflos werten und disqualifizieren)</span></label>
       <div id="fRefs" class="picker"><span class="meta">Lade Teilnehmerliste …</span></div></div>` : ''}
     ${on('cs2') ? cs2Field(t) : ''}
-    ${state.discord && !locked ? `<div class="field"><label class="check"><input type="checkbox" id="fSignup" ${t.signup ? 'checked' : ''}> Anmeldung über Discord offen</label>
-      <p class="hint">Solange das Turnier ein Entwurf ist, melden sich Spieler selbst an: <code>/anmelden</code> bzw. bei Teams <code>/team gruenden</code> und <code>/team beitreten</code>.</p>
+    ${(state.discord || state.userLogin) && !locked ? `<div class="field"><label class="check"><input type="checkbox" id="fSignup" ${t.signup ? 'checked' : ''}> Selbstanmeldung offen</label>
+      <p class="hint">Solange das Turnier ein Entwurf ist, melden sich Spieler selbst an: auf der Webseite unter „Meine Turniere“${state.discord ? ' oder im Discord mit <code>/anmelden</code> bzw. bei Teams <code>/team gruenden</code> und <code>/team beitreten</code>' : ''}. Bei Teams bestätigt der Captain jeden Beitritt.</p>
       <div class="row two-inputs">
-        <label>Max. Teilnehmer <input id="fMax" type="number" min="0" max="256" value="${t.maxParticipants || 0}" style="max-width:90px" title="Teilnehmerlimit für die Discord-Anmeldung, 0 = unbegrenzt"></label>
+        <label>Max. Teilnehmer <input id="fMax" type="number" min="0" max="256" value="${t.maxParticipants || 0}" style="max-width:90px" title="Teilnehmerlimit für die Selbstanmeldung, 0 = unbegrenzt"></label>
         <label>Anmeldeschluss <input id="fUntil" type="datetime-local" value="${localInput(t.signupUntil)}"></label></div>
-      <p class="hint">Teilnehmerlimit: Bei so vielen Teilnehmern bzw. Teams ist das Turnier voll, weitere Anmeldungen über Discord werden abgelehnt (bei Teams zählt jedes Team einmal). 0 = unbegrenzt. Ab dem Anmeldeschluss ist keine Anmeldung mehr möglich; leer = offen bis zum Start. Die Orga kann im Formular trotzdem jederzeit Teilnehmer eintragen.</p></div>` : ''}
+      <p class="hint">Teilnehmerlimit: Bei so vielen Teilnehmern bzw. Teams ist das Turnier voll, weitere Selbstanmeldungen werden abgelehnt (bei Teams zählt jedes Team einmal). 0 = unbegrenzt. Ab dem Anmeldeschluss ist keine Anmeldung mehr möglich; leer = offen bis zum Start. Die Orga kann im Formular trotzdem jederzeit Teilnehmer eintragen.</p></div>` : ''}
     ${state.discord ? `<div class="field"><label class="check"><input type="checkbox" id="fDiscord" ${t.discordEnabled !== false ? 'checked' : ''}> Discord-Voice-Kanäle anlegen</label>
       <p class="hint">Eine Kategorie mit dem Turniernamen und ein Voice-Kanal pro Teilnehmer/Team. Wird beim Löschen des Turniers mit entfernt.</p></div>` : ''}
     <p class="error" id="fError"></p>
@@ -1013,7 +1021,7 @@ async function renderAdminEdit(id) {
             <button id="drawTeams">Teams auslosen</button></div>
           <p class="hint">„Nach Setzliste ausgleichen“: Die Reihenfolge der Liste gilt als Spielstärke, die Teams werden im Schlangenmuster verteilt. Sonst zufällig. Geht die Zahl nicht auf, sind einzelne Teams um einen Spieler kleiner.</p></div>` : ''}
         ${state.discord ? `<div class="card" id="discordCard">${discordCard(t)}</div>` : ''}
-        ${await teamsCard(t)}
+        ${await adminTeamsCard(t)}
         <div class="card">
           <h2>Weitere Aktionen</h2>
           <div class="row">
@@ -1044,6 +1052,7 @@ async function renderAdminEdit(id) {
   };
   bindDiscordCard(t);
   bindRoundTimes(t);
+  bindAdminTeams(t);
   const draw = document.getElementById('drawTeams');
   if (draw) draw.onclick = async () => {
     const size = Number(document.getElementById('drawSize').value);
@@ -1061,6 +1070,48 @@ async function renderAdminEdit(id) {
     await api('DELETE', '/tournaments/' + t.id);
     location.hash = '#/admin';
   };
+}
+
+// Orga: Teams bearbeiten, auch im laufenden Turnier (Mitglied hinzufügen/entfernen, Captain, Name)
+async function adminTeamsCard(t) {
+  if ((t.teamSize || 1) <= 1) return '';
+  // Namen aus allen Personen (auch ohne Teilnahme am Event), hinzufügen nur Teilnehmer des Events
+  const [{ people }, persons] = await Promise.all([api('GET', '/people').catch(() => ({ people: [] })), api('GET', '/persons').catch(() => [])]);
+  const byId = Object.fromEntries([...persons, ...people].map((p) => [p.id, p]));
+  const taken = new Set(Object.values(t.members || {}).flat());
+  const free = people.filter((p) => !taken.has(p.id)).sort((a, b) => a.name.localeCompare(b.name, 'de'));
+  const requests = t.requests || [];
+  return `<div class="card"><h2>👥 Teams verwalten</h2>
+    <p class="hint">Jederzeit möglich, auch wenn das Turnier läuft (z. B. wenn jemand nicht da ist). Coins werden dabei nicht geprüft.</p>
+    <div class="teams">${t.participants.map((team, i) => {
+      const ids = Object.hasOwn(t.members || {}, team) ? t.members[team] : [];
+      const captain = teamCaptain(t, team);
+      const open = requests.filter((r) => r.team === team).map((r) => (byId[r.person] || {}).name || '?');
+      return `<div class="team" data-team-idx="${i}"><div class="row"><input class="ta-name" value="${esc(team)}" maxlength="60" aria-label="Teamname" style="max-width:200px">
+        <button class="small" data-ta="rename">Umbenennen</button> <span class="meta">(${ids.length}/${t.teamSize})</span></div>
+        <ul class="su-members">${ids.map((id) => `<li>${id === captain ? '👑 ' : ''}${esc((byId[id] || {}).name || 'Unbekannt')}
+          ${id === captain ? '' : `<button class="small" data-ta="captain" data-person="${esc(id)}" title="Zum Captain machen">👑</button>`}
+          <button class="small danger" data-ta="remove" data-person="${esc(id)}" title="Aus dem Team entfernen">✕</button></li>`).join('')}</ul>
+        ${ids.length < t.teamSize && free.length ? `<div class="row"><select class="ta-add" aria-label="Person hinzufügen"><option value="">Person hinzufügen …</option>${free.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select>
+          <button class="small" data-ta="add">Hinzufügen</button></div>` : ''}
+        ${open.length ? `<div class="meta">📨 Offene Anfragen: ${open.map(esc).join(', ')}</div>` : ''}</div>`;
+    }).join('') || '<p class="meta">Noch keine Teams.</p>'}</div></div>`;
+}
+
+function bindAdminTeams(t) {
+  app.querySelectorAll('[data-ta]').forEach((b) => {
+    b.onclick = async () => {
+      const box = b.closest('[data-team-idx]');
+      const team = t.participants[Number(box.dataset.teamIdx)];
+      const action = b.dataset.ta;
+      const body = { team, action, person: b.dataset.person };
+      if (action === 'add') body.person = box.querySelector('.ta-add').value;
+      if (action === 'rename') body.name = box.querySelector('.ta-name').value.trim();
+      if (action === 'add' && !body.person) return toast('Bitte eine Person auswählen');
+      if (action === 'remove' && !confirm('Person aus dem Team entfernen?')) return;
+      try { await api('POST', `/tournaments/${t.id}/team-admin`, body); toast('Gespeichert'); render(); } catch (err) { toast(err.message); }
+    };
+  });
 }
 
 // Startzeit je Runde: Runden aus dem Spielplan (im Entwurf aus der aktuellen Teilnehmerliste)

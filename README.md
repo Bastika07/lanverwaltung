@@ -74,7 +74,9 @@ Jedes Modul lässt sich im Admin-Bereich unter **Einstellungen → Module** pro 
 
 **Turnierleiter:** Pro Turnier kann die Orga Personen als Turnierleiter eintragen. Sie dürfen in diesem Turnier Ergebnisse eintragen, korrigieren und löschen, Spiele kampflos werten und Teilnehmer disqualifizieren, aber nichts an den Einstellungen ändern. Offene Spiele eines Disqualifizierten gehen kampflos an den Gegner, gespielte Ergebnisse bleiben. Jede Meldung, Bestätigung und Entscheidung landet im Protokoll, das nur Orga und Turnierleitung sehen.
 
-**Coins:** Unter **Einstellungen → Turnier-Coins** legt die Orga fest, wie viele Coins jede Person pro Event hat (0 = aus). Jedes Turnier kann Coins kosten, z. B. Preisturniere. Bei `/anmelden` und beim Gründen oder Beitreten eines Teams werden sie geprüft; wer nicht genug hat, kann sich nicht anmelden. Abmelden gibt die Coins zurück. So kann sich niemand für alle Preisturniere anmelden.
+**Coins:** Unter **Einstellungen → Turnier-Coins** legt die Orga fest, wie viele Coins jede Person pro Event hat (0 = aus). Jedes Turnier kann Coins kosten, z. B. Preisturniere. Bei der Anmeldung, beim Gründen eines Teams und bei einer Beitrittsanfrage werden sie geprüft; wer nicht genug hat, kann sich nicht anmelden. Bei Teamturnieren zahlt jedes Mitglied die vollen Kosten selbst, verbraucht werden sie mit der Bestätigung durch den Captain (dann wird erneut geprüft). Abmelden, Austreten oder ein aufgelöstes Team gibt die Coins zurück; mit einem gelöschten Konto verfallen sie. So kann sich niemand für alle Preisturniere anmelden.
+
+**Meine Turniere (Webseite):** Besucher melden sich mit Discord an und verwalten ihre Turnierteilnahme unter **Meine Turniere** selbst: Einzelturniere an- und abmelden, Team gründen (wird Captain), Beitritt bei einem bestehenden Team anfragen, Team verlassen; der Captain bestätigt oder lehnt Anfragen ab, benennt das Team um und entfernt Mitglieder. Der Coin-Stand steht oben. Anmelden dürfen nur Teilnehmer mit Ticket für das Event (gilt auch für Discord), sofern das Event Tickets verkauft. Ab Turnierstart ändern nur noch Admins etwas: Im Turnierformular unter **Teams verwalten** fügen sie Mitglieder hinzu, entfernen sie, setzen den Captain oder benennen Teams um, auch im laufenden Turnier. Anleitung für Besucher: [docs/turniere-anmeldung.md](docs/turniere-anmeldung.md).
 
 ## Discord-Bot
 
@@ -99,14 +101,15 @@ Er kennt diese Slash-Befehle:
 | `/ich <name> [ticketcode]` | Neue unbestätigte Person anlegen oder bestehende Person mit eigenem bezahltem Ticket bzw. gültigem Ticketcode verknüpfen. Alternativ verknüpft die Orga die geprüfte Discord-Benutzer-ID. Ticketcodes vertraulich behandeln. |
 | `/clan [name]` | Eigenen Clan bzw. eigenes Team setzen, leer lassen zum Entfernen. Erscheint im Sitzplan. |
 | `/anmelden`, `/abmelden` | Selbst für ein Einzelturnier an- oder abmelden, solange die Anmeldung offen ist (bis zum Anmeldeschluss, solange Plätze und Coins reichen). |
-| `/team gruenden`, `/team beitreten`, `/team verlassen` | Teams für Teamturniere bilden. |
+| `/team gruenden`, `/team beitreten`, `/team verlassen` | Teams für Teamturniere bilden. Gründer ist Captain; `beitreten` stellt eine Anfrage, die der Captain bestätigt. Verlässt der Captain das Team, ist es aufgelöst. |
+| `/team annehmen`, `/team ablehnen` | Als Captain eine Beitrittsanfrage bestätigen oder ablehnen. |
 | `/programm` | Die nächsten Programmpunkte. |
 | `/jetzt` | Turnierspiele, die gerade dran sind (▶️ = läuft). |
 | `/coins` | Eigene Turnier-Coins: wie viele noch frei sind und wofür sie verbraucht wurden. Nur wenn Coins eingeschaltet sind. |
 | `/platz [name]` | Wo sitzt jemand? Nur wenn Teilnehmerliste **und** Sitzplan für den Aufrufer sichtbar sind (auch in der Autovervollständigung) |
 | `/ticket` | Eigene Tickets und Zahlungsstatus für laufende und kommende Events |
 
-Verknüpfte Spieler werden in Discord erwähnt, wenn ihr Spiel dran ist – nur Personen, die dem Turniereintrag zugeordnet sind (Orga-Zuordnung, `/anmelden` bzw. Teammitglieder), nie über einen gleichen Namen.
+Verknüpfte Spieler werden in Discord erwähnt, wenn ihr Spiel dran ist – nur Personen, die dem Turniereintrag zugeordnet sind (Orga-Zuordnung, `/anmelden` bzw. Teammitglieder), nie über einen gleichen Namen. Bei Teams nennt die Ansage die Mitglieder (z. B. „**Team A** (X, Y, Z) vs **Team B** (…)“): als Erwähnung, wenn „Spieler erwähnen“ an ist, sonst mit Discord- bzw. Anzeigenamen.
 
 ## Starten
 
@@ -187,7 +190,7 @@ Ablauf für den Admin:
 - Ohne Kamera lässt sich der Code im Admin-Reiter „Tickets“ unter „Check-in“ auch eintippen.
 - Die QR-Codes erzeugt die Seite selbst, ohne externe Dienste. Auf der LAN braucht es dafür kein Internet.
 
-> Persönliche Daten sieht nur der Admin. Nutzer können ihr Konto selbst löschen, dabei werden offene Bestellungen storniert.
+> Persönliche Daten sieht nur der Admin. Nutzer können ihr Konto selbst löschen, dabei werden offene Bestellungen storniert. In Turnieren, die noch nicht gestartet sind, wird die Person ausgetragen; war sie Captain, wird ihr Team aufgelöst (die übrigen Mitglieder bekommen ihre Coins zurück). Laufende und beendete Turniere behalten den pseudonymisierten Eintrag.
 > Solange die Seite ohne HTTPS läuft, gehen die Daten unverschlüsselt durchs Netz. Für den echten Verkauf sollte HTTPS kommen.
 
 ## DMX-Lampe (Raspberry Pi mit OLA)

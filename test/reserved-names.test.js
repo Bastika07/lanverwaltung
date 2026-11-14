@@ -87,15 +87,17 @@ function teamSetup() {
   const commands = require('../lib/commands')({ ...ctx, tournaments, announcements: {}, schedule: {}, participation: { mayView: () => true } });
   const t = { id: 'teams', name: 'Teams', type: 'ko', status: 'draft', signup: true, teamSize: 2, participants: [], members: {}, order: [], results: {} };
   db.tournaments.push(t);
-  return { t, tournaments, event: db.events[0], team: (sub, user, opts) => commands.find('team').run({ sub, user, opts: { turnier: 'teams', ...opts } }) };
+  return { t, db, tournaments, event: db.events[0], team: (sub, user, opts) => commands.find('team').run({ sub, user, opts: { turnier: 'teams', ...opts } }) };
 }
 
 test('/team: reserved team names are stored as normal data through found, join, rename and leave', () => {
-  const { t, tournaments, event, team } = teamSetup();
+  const { t, tournaments, event, team, db } = teamSetup();
+  const personOf = (user) => db.persons.find((p) => p.discordId === user.id).id;
   const users = [1, 2, 3, 4].map((n) => ({ id: `20000000000000000${n}`, name: `Player ${n}` }));
   team('gruenden', users[0], { name: '__proto__' });
   team('gruenden', users[1], { name: 'constructor' });
-  team('beitreten', users[2], { team: '__proto__' });
+  assert.match(team('beitreten', users[2], { team: '__proto__' }), /Anfrage/);
+  team('annehmen', users[0], { person: personOf(users[2]) });
   // Plain Object (Prototyp aus irgendeinem Realm, dessen Prototyp null ist) – kein Array als untergeschobener Prototyp.
   assert.equal(Object.getPrototypeOf(Object.getPrototypeOf(t.members)), null);
   assert.deepEqual(t.participants, ['__proto__', 'constructor']);
@@ -112,7 +114,7 @@ test('/team: reserved team names are stored as normal data through found, join, 
   assert.deepEqual(Object.keys(t.members).sort(), ['Builders', '__proto__']);
   assert.deepEqual(t.participants, ['__proto__', 'Builders']);
   assert.match(team('verlassen', users[2], {}), /verlassen/);
-  assert.match(team('verlassen', users[0], {}), /war leer/);
+  assert.match(team('verlassen', users[0], {}).content, /aufgelöst/);
   assert.deepEqual(t.participants, ['Builders']);
   assert.equal(Object.hasOwn(t.members, '__proto__'), false);
 });
@@ -122,7 +124,7 @@ test('browser: team view renders reserved team names with and without members', 
   const esc = app.split('\n').find((line) => line.startsWith('const esc ='));
   const people = [{ id: 'p1', name: 'Ann' }, { id: 'p2', name: '<b>Ben</b>' }];
   const context = vm.createContext({ on: () => true, api: async () => ({ people }) });
-  vm.runInContext(`${esc}\n${app.match(/async function teamsCard[\s\S]*?\n\}/)[0]}`, context);
+  vm.runInContext(`${esc}\n${app.match(/function teamCaptain[\s\S]*?\n\}/)[0]}\n${app.match(/async function teamsCard[\s\S]*?\n\}/)[0]}`, context);
   const members = JSON.parse('{"__proto__":["p1","p2"]}'); // wie aus der API-Antwort
   const html = await context.teamsCard({ teamSize: 2, participants: ['__proto__', 'constructor', 'toString'], members });
   for (const name of ['__proto__', 'constructor', 'toString']) assert.ok(html.includes(`<strong>${name}</strong>`), name);
