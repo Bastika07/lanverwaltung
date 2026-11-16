@@ -272,16 +272,19 @@ function discordPost(text, onResult, kind = 'general', users = [], opts = {}) {
 }
 
 // ---------- Turniere ----------
-// Turniermodul (lib/tournaments.js, samt /api/tournaments) und seine Discord-Seite (Kanäle, Ansagen)
+// Turniermodul (lib/tournaments.js) mit seiner Discord-Seite (Kanäle, Ansagen) und HTTP-Seite (/api/tournaments)
 const tournamentDiscord = require('./lib/tournament-discord.js')({ Discord, settings, moduleOn, people: () => modules.people,
   events: () => modules.event, discordPost, save, broadcast, publicUrl: PUBLIC_URL });
 // Selbstanmeldung nur für Teilnehmer mit Ticket, sofern das Event Tickets verkauft (sonst wie bisher für alle)
 const mayEnter = (e, discordId) => !!discordId && (!moduleOnIn(eventModules(e), 'tickets') || participation.hasRights(e, { discordId }));
 // Person des Kontos für die Anmeldung im Web; legt sie wie /anmelden bei Bedarf mit dem Discord-Namen an
 const personForAccount = (a) => modules.people.byDiscord(a.id, true) || modules.people.selfLink({ id: a.id, name: a.discordName || a.username }, a.discordName || a.username);
-const tournaments = require('./lib/tournaments.js')({ db, save, broadcast, HttpError, str, notifier: tournamentDiscord, revision: () => revision, coinBudget, mayEnter,
+const tournaments = require('./lib/tournaments.js')({ db, save, broadcast, HttpError, str, notifier: tournamentDiscord, revision: () => revision, coinBudget, mayEnter });
+// HTTP-Seite (/api/tournaments): übersetzt Anfragen in Operationen des Turniermoduls
+const tournamentHttp = require('./lib/tournament-http.js')({ tournaments, HttpError, str,
   http: { send, readBody, isAdmin, account: (req) => modules.accounts.current(req), requireUser: (req) => modules.accounts.requireUser(req),
-    rateLimit: Security.rateLimit, event: () => modules.event.scoped(), personFor: personForAccount } });
+    rateLimit: Security.rateLimit, event: () => modules.event.scoped(), personFor: personForAccount,
+    personOf: (a) => (db.persons || []).find((x) => x.discordId === a.id) || null } });
 
 // Offene Meldungen ohne Einspruch gelten nach t.confirmMinutes automatisch (alle Events)
 const autoConfirm = () => { for (const e of modules.event ? modules.event.all() : []) tournaments.of(e).autoConfirm(); };
@@ -499,7 +502,7 @@ ctx.people = modules.people = require('./lib/people.js')(ctx);
 modules.info = require('./lib/info.js')(ctx);
 modules.details = require('./lib/details.js')(ctx);
 ctx.servers = modules.servers = require('./lib/servers.js')(ctx);
-modules.tournaments = tournaments; // /api/tournaments (ausgeschaltet nur für die Orga sichtbar)
+modules.tournaments = tournamentHttp; // /api/tournaments (ausgeschaltet nur für die Orga sichtbar)
 modules.cs2 = require('./lib/tmt.js')(ctx); // CS2-Matches über TMT2 (eigener Container)
 ctx.accounts = modules.accounts = require('./lib/accounts.js')(ctx);
 ctx.tickets = modules.tickets = require('./lib/tickets.js')(ctx);
