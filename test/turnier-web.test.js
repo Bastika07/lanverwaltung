@@ -63,3 +63,13 @@ test('Kontolöschung des Captains löst sein Team im offenen Turnier auf', async
   // Laufendes Turnier behält den (pseudonymisierten) Eintrag
   assert.deepEqual(app.snapshot().events[0].tournaments.find((x) => x.id === 'match').participants.length, 2);
 });
+
+// HTTP-Seite (lib/tournament-http.js): Admin-Routen lehnen Besucher ab, bevor sie den Body lesen
+test('Admin-Routen der Turniere prüfen den Zugang vor dem Body', async (t) => {
+  const app = await isolated(t, { prepare });
+  for (const [method, url] of [['POST', '/api/tournaments'], ['PUT', '/api/tournaments/team'], ['POST', '/api/tournaments/team/start'],
+    ['POST', '/api/tournaments/team/draw-teams'], ['POST', '/api/tournaments/team/team-admin']]) {
+    const r = await app.request(url, { method, user: 'buyer', raw: 'kein JSON' });
+    assert.equal(r.status, 401, `${method} ${url}: ${JSON.stringify(r.data)}`);
+  }
+});
