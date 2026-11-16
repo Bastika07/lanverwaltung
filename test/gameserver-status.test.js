@@ -64,7 +64,7 @@ test('Browser: Statuszeile maskiert Text vom Gameserver und zeigt „nicht errei
   const context = vm.createContext({});
   vm.runInContext(`${app.split('\n').find((l) => l.startsWith('const esc ='))}\n${info.match(/function serverStatus[\s\S]*?\n\}/)[0]}`, context);
   const html = context.serverStatus({ status: { online: true, name: '<img src=x onerror=alert(1)>', map: '"><script>', players: 4, slots: 16, password: true } });
-  assert.doesNotMatch(html, /<img|<script|"></);
+  assert.doesNotMatch(html, /<img|<script|"></i);
   assert.match(html, /&lt;img src=x onerror=alert\(1\)&gt;/);
   assert.match(html, /4\/16 Spieler · 🔒 Passwort/);
   assert.match(context.serverStatus({ status: { online: false } }), /nicht erreichbar/);
