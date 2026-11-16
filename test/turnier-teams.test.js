@@ -13,7 +13,7 @@ function setup(extra = {}, { coinBudget = () => 0, persons: more = [] } = {}) {
   const mod = tournamentModule({ db: { persons }, event, coinBudget, mayEnter: (e, id) => id !== '100000000000000004' });
   const of = mod.of;
   const as = (i) => ({ discordId: persons[i].discordId, person: () => persons[i] });
-  return { t, of, as, persons, event, notes: mod.notes };
+  return { t, of, as, persons, event, notes: mod.notes, saves: mod.saves };
 }
 
 test('Captain: Gründer wird gespeichert, Beitritt nur per Anfrage, Captain entscheidet', () => {
@@ -125,6 +125,70 @@ test('Orga greift im laufenden Turnier ein: Mitglieder, Captain und Name', () =>
   assert.ok(t.log.some((x) => /entfernt Synthetic 2/.test(x.text)));
   assert.throws(() => of.teamAdmin(admin, t, { team: 'Nope', action: 'add', person: 'p2' }), /nicht gefunden/);
   assert.throws(() => of.teamAdmin(admin, t, { team: 'Alpha', action: 'drop', person: 'p1' }), /Unbekannte Aktion/);
+});
+
+// CODING_STANDARDS.md „Erst vollständig prüfen, dann ändern“: jede Ablehnung lässt den gespeicherten Stand unverändert
+// (Turnier, Personen, keine Speicherung, keine Discord-Benachrichtigung).
+function refusedUnchanged({ t, event, persons, saves, notes }, cases) {
+  const state = () => JSON.stringify([event, persons, saves.length, notes.length]);
+  for (const [label, run, expected] of cases) {
+    const before = state();
+    assert.throws(run, typeof expected === 'string' ? (err) => err.code === expected : expected, label);
+    assert.equal(state(), before, `${label}: refused, nothing changed`);
+  }
+  return t;
+}
+
+test('Ablehnungen bei Teams ändern nichts: Captain, Anfragen, Gründen, Orga', () => {
+  const s = setup({ teamSize: 2 }, { persons: [{ id: 'p5', name: 'Synthetic 5', discordId: '100000000000000005' }] });
+  const { t, of, as } = s;
+  of.foundTeam(as(0), t, 'Alpha');
+  of.requestJoin(as(1), t, 'Alpha');
+  of.answerRequest(as(0), t, 'p2', true); // Alpha voll: p1 (Captain), p2
+  of.foundTeam(as(2), t, 'Beta'); // Beta: p3 (Captain)
+  of.requestJoin(as(4), t, 'Beta'); // offene Anfrage von p5
+  const at = new Date().toISOString();
+  t.requests.push({ person: 'p4', team: 'Alpha', at }, { person: 'p2', team: 'Beta', at }); // z. B. Altbestand
+  const admin = { admin: true };
+  refusedUnchanged(s, [
+    ['rename by member', () => of.renameTeam(as(1), t, 'X'), 'not-captain'],
+    ['remove by member', () => of.removeMember(as(1), t, 'p1'), 'not-captain'],
+    ['dissolve without team', () => of.dissolveTeam(as(4), t), 'not-captain'],
+    ['answer by member', () => of.answerRequest(as(1), t, 'p5', true), 'not-captain'],
+    ['answer request of another team', () => of.answerRequest(as(0), t, 'p5', true), 'no-request'],
+    ['accept into full team', () => of.answerRequest(as(0), t, 'p4', true), 'team-full'],
+    ['accept member of another team', () => of.answerRequest(as(2), t, 'p2', true), 'in-team'],
+    ['captain removes self', () => of.removeMember(as(0), t, 'p1'), 'captain-self'],
+    ['remove non-member', () => of.removeMember(as(0), t, 'p3'), 'no-member'],
+    ['rename to blank', () => of.renameTeam(as(0), t, '  '), 'team-name'],
+    ['rename to existing', () => of.renameTeam(as(0), t, 'beta'), 'team-exists'],
+    ['request full team', () => of.requestJoin(as(4), t, 'Alpha'), 'team-full'],
+    ['request unknown team', () => of.requestJoin(as(4), t, 'Nope'), 'no-team'],
+    ['request while in team', () => of.requestJoin(as(1), t, 'Beta'), 'in-team'],
+    ['found existing name', () => of.foundTeam(as(4), t, 'ALPHA'), 'team-exists'],
+    ['found while in team', () => of.foundTeam(as(1), t, 'Neu'), 'in-team'],
+    ['found blank name', () => of.foundTeam(as(4), t, ' '), 'team-name'],
+    ['admin op by visitor', () => of.teamAdmin(as(0), t, { team: 'Alpha', action: 'remove', person: 'p2' }), /Admin/],
+    ['admin: unknown team', () => of.teamAdmin(admin, t, { team: 'Nope', action: 'add', person: 'p5' }), /nicht gefunden/],
+    ['admin: unknown person', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'add', person: 'p9' }), /Unbekannte Person/],
+    ['admin: add member of another team', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'add', person: 'p1' }), /schon im Team/],
+    ['admin: add to full team', () => of.teamAdmin(admin, t, { team: 'Alpha', action: 'add', person: 'p5' }), /voll/],
+    ['admin: remove non-member', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'remove', person: 'p1' }), /Nicht in diesem Team/],
+    ['admin: captain not in team', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'captain', person: 'p1' }), /Mitglied/],
+    ['admin: unknown action', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'drop', person: 'p3' }), /Unbekannte Aktion/],
+    ['admin: rename to existing', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'rename', name: 'alpha' }), 'team-exists'],
+    ['admin: rename to blank', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'rename', name: '' }), 'team-name'],
+  ]);
+  t.status = 'running';
+  refusedUnchanged(s, [
+    ['rename after start', () => of.renameTeam(as(0), t, 'Neu'), 'started'],
+    ['remove after start', () => of.removeMember(as(0), t, 'p2'), 'started'],
+    ['leave after start', () => of.leaveTeam(as(1), t), 'closed'],
+    ['dissolve after start', () => of.dissolveTeam(as(0), t), 'closed'],
+    ['request after start', () => of.requestJoin(as(4), t, 'Beta'), 'closed'],
+    ['found after start', () => of.foundTeam(as(4), t, 'Gamma'), 'closed'],
+    ['accept after start', () => of.answerRequest(as(2), t, 'p5', true), 'closed'],
+  ]);
 });
 
 test('Kontolöschung: nur Turniere vor dem Start, Captain-Team aufgelöst, Anfragen weg', () => {
