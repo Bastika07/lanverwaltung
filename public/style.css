@@ -539,3 +539,22 @@ tr.dq td { opacity: .55; text-decoration: line-through; }
 .ref-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; max-height: 180px; overflow-y: auto; }
 .round-times { display: grid; gap: 6px; margin-bottom: 8px; }
 .round-times label { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+/* Meine Turniere (public/signup.js) */
+.su-coins { padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--bg); white-space: nowrap; }
+.su-section { margin: 20px 0 8px; font-size: 1.1rem; }
+.su-card { margin-bottom: 12px; }
+.su-card h2 { margin: 0; }
+.su-body { margin-top: 10px; }
+.su-state { margin: 6px 0; }
+.su-state.ok { color: var(--win); }
+.su-members { margin: 6px 0 10px; padding-left: 20px; }
+.su-members li { margin: 4px 0; }
+.su-requests { margin: 10px 0; padding: 10px; border: 1px solid var(--accent); border-radius: 8px; }
+.su-request { margin-top: 6px; }
+.su-choice { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+@media (max-width: 760px) { .su-choice { grid-template-columns: 1fr; } }
+.su-team { margin-top: 6px; }
+.su-help ul { margin: 8px 0; padding-left: 20px; }
+.su-help li { margin: 4px 0; }
+.su-rename, .su-found { margin: 8px 0; }

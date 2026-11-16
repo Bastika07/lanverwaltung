@@ -25,7 +25,7 @@ test('Erwähnungen: nur namensgleiche, selbst angelegte Person wird nicht angepi
 test('Erwähnungen: Teams weiter über ihre Mitglieder, ohne Bindung niemand', () => {
   const post = start({ participants: ['Team Synthetic', 'Alice'], members: { 'Team Synthetic': ['carol', 'dave'] }, playerIds: {} });
   assert.deepEqual(post.users, ['100000000000000003', '100000000000000004']);
-  assert.match(post.text, /\*\*Team Synthetic\*\* \(<@100000000000000003> <@100000000000000004>\) vs \*\*Alice\*\*$/m);
+  assert.match(post.text, /\*\*Team Synthetic\*\* \(<@100000000000000003>, <@100000000000000004>\) vs \*\*Alice\*\*$/m);
   const reserved = start({ participants: ['__proto__', 'Bob'], playerIds: { Bob: 'bob' } });
   assert.deepEqual(reserved.users, ['100000000000000002'], 'reserved name without binding');
 });
