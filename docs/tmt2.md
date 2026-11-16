@@ -105,6 +105,15 @@ Die Belegung fragt der LAN-Client bei TMT2 ab. Namen, Zustand und die Adressen v
 
 Schreibt das Skript die aktuelle IP des Hosts hinein, folgen die Links nach einem Netzwechsel (z. B. auf der LAN-Party) von selbst. Feste Werte in `TMT2_PUBLIC_URL` bzw. `AMP_PUBLIC_URL` haben Vorrang. Den Stand hält die LAN-Verwaltung nur im Speicher. Nach einem Neustart erscheint er mit der nächsten Meldung des Clients wieder, nach wenigen Sekunden.
 
+## Gameserver-Status auf Infos und Beamer
+
+Für jeden Gameserver unter **Infos** kann die Orga einen **Query-Port** eintragen (Steam-A2S, z. B. Mordhau mit `-QueryPort`, bei CS2 meist der Spielport). Der Host kommt aus der Adresse des Eintrags. Der LAN-Client holt sich bei jedem Abruf diese Ziele, fragt sie per UDP ab (`A2S_INFO`, ohne Zugangsdaten) und meldet Servername, Karte, Spieler/Slots (ohne Bots) und ob ein Passwort gesetzt ist. Spielernamen werden nicht abgefragt.
+
+- Die LAN-Verwaltung schickt selbst kein UDP ins Netz; der Stand liegt nur im Speicher, Seitenaufrufe lösen keine Abfrage aus.
+- Angenommen werden nur Ergebnisse für angefragte Server, Texte ohne Steuerzeichen und gekürzt, angezeigt HTML-maskiert.
+- Ohne Antwort oder wenn der LAN-Client länger als eine Minute nichts meldet, steht dort „nicht erreichbar“.
+- Voraussetzung: Der LAN-Client läuft (`TMT2_AGENT_TOKEN`) und erreicht den Query-Port im LAN.
+
 ## Ablauf
 
 1. Admin → **CS2-Matches**: Turnierpaarung und Format (BO1, BO3, BO5) wählen, „In TMT2 anlegen“. Das Match steht auf „wartet auf LAN-Client“, bis der Client es angelegt hat, normalerweise nach wenigen Sekunden.
