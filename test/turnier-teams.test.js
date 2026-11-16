@@ -2,6 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { tournamentModule, discordSide } = require('../test-support/tournaments.cjs');
+const { testCtx } = require('../test-support/ctx.cjs');
 
 // Teamturnier mit offener Anmeldung und vier synthetischen Personen; p4 hat kein Ticket (mayEnter).
 function setup(extra = {}, { coinBudget = () => 0, persons: more = [] } = {}) {
@@ -192,4 +193,20 @@ test('Discord: Teams nennen ihre Mitglieder auch ohne Erwähnungen; Captain beko
   assert.deepEqual(calls[0], ['POST', '/users/@me/channels', { recipient_id: '100000000000000003' }]);
   assert.match(calls[1][2], /Dave\*\* möchte deinem Team \*\*Team A\*\*/);
   assert.equal(calls.length, 2);
+});
+
+// Issue #121: Auch im Discord gilt „nur mit Ticket“ – echtes Commands-Modul über dem echten Turniermodul.
+test('Discord /anmelden: ohne Ticket abgelehnt mit eigenem Hinweis, mit Ticket angemeldet', () => {
+  const persons = [1, 2].map((n) => ({ id: `p${n}`, name: `Synthetic ${n}`, discordId: `10000000000000000${n}` }));
+  const t = { id: 'solo', name: 'Solo', type: 'ko', status: 'draft', signup: true, participants: [], members: {}, playerIds: {}, order: [], results: {} };
+  const event = { id: 'e', tournaments: [t] };
+  const { tournaments } = tournamentModule({ db: { persons }, event, mayEnter: (e, id) => id !== '100000000000000002' });
+  // Turniermodul öffentlich sichtbar: Die Anmeldung muss das Ticket trotzdem prüfen
+  const commands = require('../lib/commands.js')(testCtx({ announcements: {}, schedule: {}, participation: { mayView: () => true },
+    people: { byDiscord: (id) => persons.find((p) => p.discordId === id) || null }, tournaments, event: { current: () => event } }));
+  const anmelden = (id) => commands.find('anmelden').run({ user: { id }, opts: { turnier: 'solo' } });
+  assert.throws(() => anmelden('100000000000000002'), /nur Teilnehmer mit Ticket/);
+  assert.deepEqual(t.participants, [], 'refused signup changes nothing');
+  assert.match(anmelden('100000000000000001'), /Angemeldet bei \*\*Solo\*\* als \*\*Synthetic 1\*\*/);
+  assert.deepEqual(t.participants, ['Synthetic 1']);
 });

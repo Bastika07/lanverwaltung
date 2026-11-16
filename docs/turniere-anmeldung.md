@@ -77,4 +77,4 @@ Unter **Tickets → Konto löschen** kannst du dein Konto entfernen. Dabei gilt 
 - **Anmeldung öffnen:** im Turnierformular „Anmeldung offen“ setzen, optional Anmeldeschluss, Teilnehmerlimit und Coins.
 - **Coins:** unter **Einstellungen → Turnier-Coins** die Coins je Person und Event festlegen (0 = aus).
 - **Teams verwalten:** im Turnierformular unter **👥 Teams verwalten** Mitglieder hinzufügen oder entfernen, den Captain setzen (👑) und Teams umbenennen, auch im laufenden Turnier. Der Turnierbaum bleibt dabei unverändert, Coins werden hier nicht geprüft. Offene Beitrittsanfragen stehen am Team.
-- **Nur mit Ticket:** Verkauft das Event Tickets, können sich nur Teilnehmer mit Ticket selbst anmelden (Webseite und Discord). Ohne Ticketmodul geht es für alle.
+- **Nur mit Ticket:** Verkauft das Event Tickets, können sich nur Teilnehmer mit Ticket selbst anmelden (Webseite und Discord). Ohne Ticketmodul geht es für alle. Die Webseite bekommt die Ablehnung mit dem Code `no-ticket`; der Login über `/api/auth/login?ziel=turniere` führt danach zurück zu „Meine Turniere“ (nur feste Ziele).

@@ -474,7 +474,9 @@ const server = http.createServer(async (req, res) => {
     const known = err instanceof HttpError || (err.status >= 400 && err.status < 500);
     if (!known) console.error(err); // Details nur ins Log, nie an den Browser
     if (err.retryAfter) res.setHeader('Retry-After', String(err.retryAfter));
-    if (!res.headersSent) send(res, known ? err.status : 500, { error: known ? err.message : 'Serverfehler' });
+    // Grund der Ablehnung als fester Code (z. B. „no-ticket“ aus dem Turniermodul), nie Node-Fehlercodes
+    const code = known && typeof err.code === 'string' && /^[a-z][a-z-]{0,30}$/.test(err.code) ? err.code : undefined;
+    if (!res.headersSent) send(res, known ? err.status : 500, { error: known ? err.message : 'Serverfehler', code });
   }
 });
 server.headersTimeout = 20000; // langsame Angreifer (Slowloris) abwehren
