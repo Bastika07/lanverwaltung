@@ -55,7 +55,7 @@ function suMyTeam(t, coins) {
   }
   if (!draft) return html + '<p class="hint">Das Turnier läuft – Änderungen am Team macht nur noch die Orga.</p>';
   if (team.captain) {
-    html += `<form class="row su-rename" data-t="${esc(t.id)}"><input name="name" maxlength="60" value="${esc(team.name)}" aria-label="Teamname" style="max-width:220px">
+    html += `<form class="row su-rename" data-t="${esc(t.id)}"><input name="name" maxlength="${Bracket.NAME_MAX}" value="${esc(team.name)}" aria-label="Teamname" style="max-width:220px">
       <button class="small" type="submit">Umbenennen</button></form>`;
     if (t.open) html += `<div class="row">${suBtn('dissolve', t, 'Team auflösen', '', 'danger small')}</div>
       <p class="hint">Auflösen meldet das ganze Team ab, alle bekommen ihre Coins zurück. Eine Übergabe der Captain-Rolle gibt es nicht.</p>`;
@@ -84,7 +84,7 @@ function suTeamChoice(t, coins) {
       ${t.teams.length ? `<div class="teams">${teams}</div><p class="hint">Der Captain des Teams muss deine Anfrage bestätigen.</p>` : '<p class="meta">Noch keine Teams – gründe einfach das erste.</p>'}</div>
     <div><strong>Oder ein eigenes Team gründen</strong>
       ${full ? '<p class="hint">Das Turnier ist voll, neue Teams gehen nicht mehr.</p>' : `<form class="row su-found" data-t="${esc(t.id)}">
-        <input name="name" required maxlength="60" placeholder="Teamname" aria-label="Teamname" style="max-width:220px">
+        <input name="name" required maxlength="${Bracket.NAME_MAX}" placeholder="Teamname" aria-label="Teamname" style="max-width:220px">
         <button class="primary" type="submit">Team gründen${t.coins && coins.budget ? ` (${t.coins} 🪙)` : ''}</button></form>
         <p class="hint">Du wirst Captain und bestätigst, wer mitspielt.</p>`}</div></div>`;
 }

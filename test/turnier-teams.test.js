@@ -169,13 +169,14 @@ test('Ablehnungen bei Teams ändern nichts: Captain, Anfragen, Gründen, Orga', 
     ['found while in team', () => of.foundTeam(as(1), t, 'Neu'), 'in-team'],
     ['found blank name', () => of.foundTeam(as(4), t, ' '), 'team-name'],
     ['admin op by visitor', () => of.teamAdmin(as(0), t, { team: 'Alpha', action: 'remove', person: 'p2' }), /Admin/],
-    ['admin: unknown team', () => of.teamAdmin(admin, t, { team: 'Nope', action: 'add', person: 'p5' }), /nicht gefunden/],
-    ['admin: unknown person', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'add', person: 'p9' }), /Unbekannte Person/],
-    ['admin: add member of another team', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'add', person: 'p1' }), /schon im Team/],
-    ['admin: add to full team', () => of.teamAdmin(admin, t, { team: 'Alpha', action: 'add', person: 'p5' }), /voll/],
-    ['admin: remove non-member', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'remove', person: 'p1' }), /Nicht in diesem Team/],
-    ['admin: captain not in team', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'captain', person: 'p1' }), /Mitglied/],
-    ['admin: unknown action', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'drop', person: 'p3' }), /Unbekannte Aktion/],
+    ['admin: unknown team', () => of.teamAdmin(admin, t, { team: 'Nope', action: 'add', person: 'p5' }), 'no-team'],
+    ['admin: unknown person', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'add', person: 'p9' }), 'unknown-person'],
+    ['admin: add member of another team', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'add', person: 'p1' }), 'in-team'],
+    ['admin: add to full team', () => of.teamAdmin(admin, t, { team: 'Alpha', action: 'add', person: 'p5' }), 'team-full'],
+    ['admin: remove non-member', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'remove', person: 'p1' }), 'no-member'],
+    ['admin: captain not in team', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'captain', person: 'p1' }), 'no-member'],
+    ['admin: single tournament', () => of.teamAdmin(admin, { ...t, teamSize: 1 }, { team: 'Beta', action: 'add', person: 'p5' }), 'single-tournament'],
+    ['admin: unknown action', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'drop', person: 'p3' }), 'unknown-action'],
     ['admin: rename to existing', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'rename', name: 'alpha' }), 'team-exists'],
     ['admin: rename to blank', () => of.teamAdmin(admin, t, { team: 'Beta', action: 'rename', name: '' }), 'team-name'],
   ]);
@@ -273,4 +274,14 @@ test('Discord /anmelden: ohne Ticket abgelehnt mit eigenem Hinweis, mit Ticket a
   assert.deepEqual(t.participants, [], 'refused signup changes nothing');
   assert.match(anmelden('100000000000000001'), /Angemeldet bei \*\*Solo\*\* als \*\*Synthetic 1\*\*/);
   assert.deepEqual(t.participants, ['Synthetic 1']);
+});
+
+test('Teamnamen: Discord erlaubt dieselbe Länge wie Webseite und Turniermodul (60 Zeichen)', () => {
+  const { t, of, as } = setup();
+  const long = 'T'.repeat(60);
+  assert.equal(of.foundTeam(as(0), t, long).team, long);
+  assert.throws(() => of.renameTeam(as(0), t, 'T'.repeat(61)), /60 Zeichen/);
+  const commands = require('../lib/commands.js')(testCtx({ announcements: {}, schedule: {}, people: {}, tournaments: {}, event: {}, participation: {} }));
+  const team = commands.commands().find((d) => d.name === 'team');
+  assert.equal(team.options.find((o) => o.name === 'gruenden').options.find((o) => o.name === 'name').max_length, 60);
 });

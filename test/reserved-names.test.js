@@ -123,8 +123,9 @@ test('browser: team view renders reserved team names with and without members', 
   const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
   const esc = app.split('\n').find((line) => line.startsWith('const esc ='));
   const people = [{ id: 'p1', name: 'Ann' }, { id: 'p2', name: '<b>Ben</b>' }];
-  const context = vm.createContext({ on: () => true, api: async () => ({ people }) });
-  vm.runInContext(`${esc}\n${app.match(/function teamCaptain[\s\S]*?\n\}/)[0]}\n${app.match(/async function teamsCard[\s\S]*?\n\}/)[0]}`, context);
+  // Wie im Browser: die gemeinsame Turnierlogik (public/bracket.js) steht als globales Bracket bereit
+  const context = vm.createContext({ on: () => true, api: async () => ({ people }), Bracket: require('../public/bracket.js') });
+  vm.runInContext(`${esc}\n${app.match(/async function teamsCard[\s\S]*?\n\}/)[0]}`, context);
   const members = JSON.parse('{"__proto__":["p1","p2"]}'); // wie aus der API-Antwort
   const html = await context.teamsCard({ teamSize: 2, participants: ['__proto__', 'constructor', 'toString'], members });
   for (const name of ['__proto__', 'constructor', 'toString']) assert.ok(html.includes(`<strong>${name}</strong>`), name);

@@ -8,6 +8,18 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
+  // Teilnehmer- und Teamnamen: höchstens so viele Zeichen (Server, Discord, Formulare)
+  const NAME_MAX = 60;
+
+  // Teams: Mitglieder nur aus eigenen Einträgen (Teamnamen sind frei wählbar, auch „__proto__“).
+  // Captain: ausdrücklich gespeichert (Gründer); ältere Teams ohne Eintrag bzw. ein ausgetretener Captain: erstes Mitglied
+  const teamMembers = (t, team) => (t.members && Object.hasOwn(t.members, team) ? t.members[team] : []);
+  function teamCaptain(t, team) {
+    const ids = teamMembers(t, team);
+    const c = t.captains && Object.hasOwn(t.captains, team) ? t.captains[team] : null;
+    return ids.includes(c) ? c : ids[0] || null;
+  }
+
   function nextPow2(n) {
     let s = 1;
     while (s < n) s *= 2;
@@ -439,5 +451,5 @@
     return view.matches.filter((m) => m.status === 'ready');
   }
 
-  return { compute, playable, nextPow2, seedOrder, groupSplit, GROUP_NAMES };
+  return { compute, playable, nextPow2, seedOrder, groupSplit, GROUP_NAMES, NAME_MAX, teamMembers, teamCaptain };
 });

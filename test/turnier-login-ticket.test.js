@@ -41,6 +41,11 @@ test('Login mit ziel=turniere springt zu „Meine Turniere“ zurück, andere Zi
   assert.equal(await landing(app, 'ben'), '/#/tickets', 'without target: as before');
   assert.equal(await landing(app, 'carl', '?ziel=https%3A%2F%2Fevil.invalid%2F'), '/#/tickets', 'no free redirect');
   assert.equal(await landing(app, 'dora', '?ziel=__proto__'), '/#/tickets', 'only own keys count');
+  // Abbruch bei Discord: zurück zur Ausgangsseite, mit Hinweis
+  const start = await fetch(`${app.base}/api/auth/login?ziel=turniere`, { redirect: 'manual' });
+  const state = new URL(start.headers.get('location')).searchParams.get('state');
+  const aborted = await fetch(`${app.base}/api/auth/callback?error=access_denied&state=${state}`, { redirect: 'manual', headers: { Cookie: `lan_state=${state}` } });
+  assert.equal(aborted.headers.get('location'), '/#/meine-turniere?hinweis=Anmeldung%20abgebrochen');
 });
 
 // Offenes Einzelturnier „solo“ im ersten Event; buyer hat ein Ticket, outsider nicht.

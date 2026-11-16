@@ -371,21 +371,14 @@ function bindRefCard(t) {
   });
 }
 
-// Captain eines Teams wie auf dem Server: gespeichert, sonst das erste Mitglied
-function teamCaptain(t, team) {
-  const ids = t.members && Object.hasOwn(t.members, team) ? t.members[team] : [];
-  const c = t.captains && Object.hasOwn(t.captains, team) ? t.captains[team] : null;
-  return ids.includes(c) ? c : ids[0] || null;
-}
-
 // Team-Mitglieder (über Discord oder „Meine Turniere“ gegründete Teams)
 async function teamsCard(t) {
   if ((t.teamSize || 1) <= 1 || !t.members || !Object.keys(t.members).length || !on('people')) return '';
   const { people } = await api('GET', '/people').catch(() => ({ people: [] }));
   const byId = Object.fromEntries(people.map((p) => [p.id, p]));
   return `<div class="card" style="margin-top:16px"><h2>👥 Teams</h2><div class="teams">${t.participants.map((team) => {
-    const m = (Object.hasOwn(t.members, team) ? t.members[team] : []).map((id) => byId[id]).filter(Boolean); // auch „__proto__“
-    const captain = teamCaptain(t, team);
+    const m = Bracket.teamMembers(t, team).map((id) => byId[id]).filter(Boolean); // auch „__proto__“
+    const captain = Bracket.teamCaptain(t, team);
     return `<div class="team"><strong>${esc(team)}</strong> <span class="meta">(${m.length}/${t.teamSize})</span>
       <div class="meta">${m.map((p) => esc(p.name) + (p.id === captain ? ' 👑' : '')).join(', ') || '–'}</div></div>`;
   }).join('')}</div></div>`;
@@ -1084,10 +1077,10 @@ async function adminTeamsCard(t) {
   return `<div class="card"><h2>👥 Teams verwalten</h2>
     <p class="hint">Jederzeit möglich, auch wenn das Turnier läuft (z. B. wenn jemand nicht da ist). Coins werden dabei nicht geprüft.</p>
     <div class="teams">${t.participants.map((team, i) => {
-      const ids = Object.hasOwn(t.members || {}, team) ? t.members[team] : [];
-      const captain = teamCaptain(t, team);
+      const ids = Bracket.teamMembers(t, team);
+      const captain = Bracket.teamCaptain(t, team);
       const open = requests.filter((r) => r.team === team).map((r) => (byId[r.person] || {}).name || '?');
-      return `<div class="team" data-team-idx="${i}"><div class="row"><input class="ta-name" value="${esc(team)}" maxlength="60" aria-label="Teamname" style="max-width:200px">
+      return `<div class="team" data-team-idx="${i}"><div class="row"><input class="ta-name" value="${esc(team)}" maxlength="${Bracket.NAME_MAX}" aria-label="Teamname" style="max-width:200px">
         <button class="small" data-ta="rename">Umbenennen</button> <span class="meta">(${ids.length}/${t.teamSize})</span></div>
         <ul class="su-members">${ids.map((id) => `<li>${id === captain ? '👑 ' : ''}${esc((byId[id] || {}).name || 'Unbekannt')}
           ${id === captain ? '' : `<button class="small" data-ta="captain" data-person="${esc(id)}" title="Zum Captain machen">👑</button>`}
