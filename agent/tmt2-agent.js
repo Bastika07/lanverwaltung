@@ -8,6 +8,7 @@
 // wird mit der Belegung aus TMT2 an die LAN-Verwaltung gemeldet (Admin-Seite CS2-Matches).
 
 const fs = require('fs');
+const { queryInfo } = require('./a2s.js');
 
 const LOCAL_HOSTS = ['localhost', '127.0.0.1', '[::1]'];
 
@@ -91,6 +92,18 @@ function createAgent({ lanUrl, agentToken, tmtUrl, tmtToken, statusFile = '', lo
     return { ampUrl: text(file.ampUrl, 200), tmt2Url: text(file.tmt2Url, 200), servers: [...servers.values()] };
   }
 
+  // Gameserver-Status für Infos und Beamer (Steam-A2S): nur Name, Karte, Spieler-/Botzahl, Slots und Passwort ja/nein,
+  // keine Spielernamen. Ziele nennt die LAN-Verwaltung; nur gültige Hosts und Ports, höchstens 30.
+  async function gameservers(query) {
+    const targets = list(query).filter((q) => q && typeof q.host === 'string' && /^[a-z0-9.-]{1,253}$/i.test(q.host)
+      && Number.isInteger(q.port) && q.port >= 1 && q.port <= 65535).slice(0, 30);
+    return Promise.all(targets.map(async ({ host, port }) => {
+      const r = await queryInfo(host, port);
+      const i = r.ok ? r.info : null;
+      return { host, port, ok: !!i, ...(i ? { info: { name: i.name, map: i.map, players: i.players, maxPlayers: i.maxPlayers, bots: i.bots, password: i.password } } : {}) };
+    }));
+  }
+
   // Ein Durchlauf: Aufträge holen, an TMT2 ausführen, Ergebnis melden. Gibt die gewünschte Pause in Sekunden zurück.
   async function cycle() {
     const jobs = await lan('GET', '/api/cs2/agent/poll') || {};
@@ -124,6 +137,7 @@ function createAgent({ lanUrl, agentToken, tmtUrl, tmtToken, statusFile = '', lo
       }
     }
     out.lan = await lanStatus();
+    out.gameservers = await gameservers(jobs.query);
     await lan('POST', '/api/cs2/agent/report', out);
     const n = Number(jobs.pollSeconds);
     return Number.isFinite(n) ? Math.min(Math.max(n, 2), 60) : 5;

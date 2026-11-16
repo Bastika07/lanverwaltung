@@ -3,28 +3,13 @@
 // mit synthetischen Daten. Kein echter Gameserver, kein Proxmox.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const dgram = require('node:dgram');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { parseInfo, queryInfo, mergeProxmox, renderFrame, loadConfig, visible } = require('../agent/lan-board.js');
+const { infoPacket, stub } = require('../test-support/a2s-stub.cjs');
 
-function infoPacket({ name = 'Testserver', map = 'de_test', game = 'Counter-Strike 2', players = 3, max = 10, bots = 1, password = 0 } = {}) {
-  const z = (s) => Buffer.from(`${s}\0`, 'utf8');
-  return Buffer.concat([Buffer.from([0xff, 0xff, 0xff, 0xff, 0x49, 17]), z(name), z(map), z('csgo'), z(game),
-    Buffer.from([0xda, 0x02, players, max, bots, 0x64, 0x6c, password, 1]), z('1.0.0')]);
-}
-
-// Stub: antwortet erst mit einer Challenge, dann (nur mit korrekter Challenge) mit dem Info-Paket
-async function stub(t, respond) {
-  const sock = dgram.createSocket('udp4');
-  const seen = [];
-  sock.on('message', (msg, peer) => { seen.push(msg); const r = respond(msg, seen.length); if (r) sock.send(r, peer.port, peer.address); });
-  await new Promise((resolve) => sock.bind(0, '127.0.0.1', resolve));
-  t.after(() => sock.close());
-  return { port: sock.address().port, seen };
-}
 
 test('lan-board: A2S_INFO wird gelesen, auch mit Spielern, Bots und Passwort', () => {
   const info = parseInfo(infoPacket({ players: 5, max: 12, bots: 2, password: 1 }));

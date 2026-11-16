@@ -46,10 +46,19 @@ function wifiBlock(i) {
     </dl>${i.wifi.note ? `<div class="meta markdown">${richText(i.wifi.note)}</div>` : ''}</div>`;
 }
 
+// Live-Stand eines Gameservers (Steam-A2S, gemeldet vom LAN-Client); ohne Query-Port nichts
+function serverStatus(s) {
+  const st = s.status;
+  if (!st) return '';
+  if (!st.online) return '<div class="meta gs-status">● nicht erreichbar</div>';
+  return `<div class="meta gs-status gs-on">● online${st.name ? ` · ${esc(st.name)}` : ''}${st.map ? ` · Karte ${esc(st.map)}` : ''}
+    · ${esc(st.players)}/${esc(st.slots)} Spieler${st.password ? ' · 🔒 Passwort' : ''}</div>`;
+}
+
 function serverTable(i) {
   if (!i.servers.length) return '';
   return `<div class="card"><h2>🖥️ Gameserver</h2><div style="overflow-x:auto"><table class="info-table"><thead><tr><th>Server</th><th>Adresse</th><th>Passwort</th></tr></thead><tbody>
-    ${i.servers.map((s) => `<tr><td><strong>${esc(s.name)}</strong>${s.game ? `<div class="meta">${esc(s.game)}</div>` : ''}${s.note ? `<div class="meta markdown">${richText(s.note)}</div>` : ''}</td>
+    ${i.servers.map((s) => `<tr><td><strong>${esc(s.name)}</strong>${s.game ? `<div class="meta">${esc(s.game)}</div>` : ''}${serverStatus(s)}${s.note ? `<div class="meta markdown">${richText(s.note)}</div>` : ''}</td>
       <td class="nowrap"><code>${esc(s.address)}</code> ${copyBtn(s.address)}</td>
       <td class="nowrap">${s.password ? `<code>${esc(s.password)}</code> ${copyBtn(s.password)}` : '<span class="meta">–</span>'}</td></tr>`).join('')}
   </tbody></table></div></div>`;
@@ -99,7 +108,8 @@ beamerSlides.push({
         ${hasWifi(i) ? `<div class="bi-block"><div class="bi-label">📶 WLAN</div><div class="bi-big">${esc(i.wifi.ssid)}</div>
           ${i.wifi.password ? `<div class="bi-label">Passwort</div><div class="bi-big">${esc(i.wifi.password)}</div>` : ''}</div>` : ''}
         ${i.servers.length ? `<div class="bi-block"><div class="bi-label">🖥️ Gameserver</div>${i.servers.slice(0, 6).map((s) =>
-          `<div class="bi-row"><strong>${esc(s.name)}</strong> <code>${esc(s.address)}</code>${s.password ? ` · PW <code>${esc(s.password)}</code>` : ''}</div>`).join('')}</div>` : ''}
+          `<div class="bi-row"><strong>${esc(s.name)}</strong> <code>${esc(s.address)}</code>${s.password ? ` · PW <code>${esc(s.password)}</code>` : ''}
+            ${s.status ? `<span class="gs-status${s.status.online ? ' gs-on' : ''}">● ${s.status.online ? `${esc(s.status.players)}/${esc(s.status.slots)}${s.status.map ? ` · ${esc(s.status.map)}` : ''}` : 'nicht erreichbar'}</span>` : ''}</div>`).join('')}</div>` : ''}
       </div>`,
     }];
   },
@@ -148,7 +158,7 @@ adminViews.infos = {
               <div class="field"><label for="wNote">Hinweis (Markdown)</label><textarea id="wNote" class="short" placeholder="z. B. Kabel bevorzugt, Switch unter dem Tisch">${esc(i.wifi.note)}</textarea>${markdownHelp('wNote')}</div>
             </div>
             <div class="card"><h2>🖥️ Gameserver</h2>
-              ${listEditor('servers', i.servers, [{ key: 'name', label: 'Name', flex: 1.2 }, { key: 'game', label: 'Spiel' }, { key: 'address', label: 'IP:Port', flex: 1.3 }, { key: 'password', label: 'Passwort' }, { key: 'note', label: 'Hinweis', flex: 1.4 }])}
+              ${listEditor('servers', i.servers, [{ key: 'name', label: 'Name', flex: 1.2 }, { key: 'game', label: 'Spiel' }, { key: 'address', label: 'IP:Port', flex: 1.3 }, { key: 'queryPort', label: 'Query-Port (Status)', flex: 0.7 }, { key: 'password', label: 'Passwort' }, { key: 'note', label: 'Hinweis', flex: 1.4 }])}
             </div>
             <div class="card"><h2>ℹ️ Sonstiges</h2><label for="iExtra">Inhalt (Markdown)</label><textarea id="iExtra" class="short">${esc(i.extra)}</textarea>${markdownHelp('iExtra')}</div>
           </div>

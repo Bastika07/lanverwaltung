@@ -499,6 +499,8 @@ ctx.event = modules.event = require('./lib/event.js')(ctx);
 ctx.announcements = modules.announcements = require('./lib/announcements.js')(ctx);
 ctx.schedule = modules.schedule = require('./lib/schedule.js')(ctx);
 ctx.people = modules.people = require('./lib/people.js')(ctx);
+// Gameserver-Status (Infos, Beamer): meldet der LAN-Client; Ziele aus den Gameservern des aktuellen Events
+ctx.gameservers = require('./lib/gameserver-status.js')({ servers: () => ((modules.event.current() || {}).info || {}).servers || [] });
 modules.info = require('./lib/info.js')(ctx);
 modules.details = require('./lib/details.js')(ctx);
 ctx.servers = modules.servers = require('./lib/servers.js')(ctx);
